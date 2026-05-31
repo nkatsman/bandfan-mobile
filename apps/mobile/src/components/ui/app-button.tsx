@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { cloneElement, isValidElement, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, type StyleProp, type ViewStyle } from 'react-native';
 import type { ReactNode } from 'react';
 
@@ -6,7 +6,9 @@ import { spacing, typeScale } from '../../design/tokens';
 import { useAppTheme } from '../../design/theme';
 
 const DESTRUCTIVE_TEXT_COLOR = '#FFFFFF';
-const DARK_GREY_BUTTON_FILL = '#3A3A38';
+const DARK_BUTTON_FILL = '#333333';
+const DARK_BUTTON_TEXT_COLOR = '#FFFFFF';
+const DARK_BUTTON_BORDER = '#1A1A19';
 
 type AppButtonTone = 'primary' | 'secondary' | 'danger';
 
@@ -25,6 +27,9 @@ type AppButtonProps = {
 export function AppButton({ active = false, disabled = false, icon, iconOnly = false, label, onPress, square = false, style, tone = 'primary' }: AppButtonProps) {
   const theme = useAppTheme();
   const styles = useMemo(() => createStyles(theme.ui, theme.mode), [theme]);
+  const labelStyle = tone === 'danger' ? styles.dangerLabel : theme.mode === 'dark' ? styles.darkLabel : styles.label;
+  const iconColor = tone === 'danger' ? DESTRUCTIVE_TEXT_COLOR : theme.mode === 'dark' ? DARK_BUTTON_TEXT_COLOR : theme.ui.textPrimary;
+  const renderedIcon = isValidElement<{ color?: string }>(icon) ? cloneElement(icon, { color: iconColor }) : icon;
 
   return (
     <Pressable
@@ -34,8 +39,8 @@ export function AppButton({ active = false, disabled = false, icon, iconOnly = f
       onPress={onPress}
       style={({ pressed }) => [styles.button, square && styles.square, styles[tone], (active || pressed) && !disabled && styles.pressed, disabled && styles.disabled, style]}
     >
-      {icon}
-      {iconOnly ? null : <Text style={[styles.label, tone === 'danger' && styles.dangerLabel]}>{label}</Text>}
+      {renderedIcon}
+      {iconOnly ? null : <Text style={labelStyle}>{label}</Text>}
     </Pressable>
   );
 }
@@ -44,23 +49,31 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui'], mode: Return
   return StyleSheet.create({
     button: {
       alignItems: 'center',
-      borderColor: colors.borderStrong,
+      borderColor: mode === 'dark' ? DARK_BUTTON_BORDER : colors.borderStrong,
       borderWidth: 2,
       flexDirection: 'row',
       gap: spacing.xs,
       justifyContent: 'center',
       minHeight: 52,
       paddingHorizontal: spacing.md,
-      shadowColor: '#000000',
-      shadowOffset: { width: 3, height: 3 },
-      shadowOpacity: 1,
-      shadowRadius: 0,
+      boxShadow: '4px 4px 0px #000000',
     },
     danger: {
       backgroundColor: colors.buttonDanger,
     },
     dangerLabel: {
       color: DESTRUCTIVE_TEXT_COLOR,
+      fontFamily: 'IBMPlexMono',
+      fontSize: typeScale.button,
+      fontWeight: '900',
+      letterSpacing: 0.8,
+    },
+    darkLabel: {
+      color: DARK_BUTTON_TEXT_COLOR,
+      fontFamily: 'IBMPlexMono',
+      fontSize: typeScale.button,
+      fontWeight: '900',
+      letterSpacing: 0.8,
     },
     disabled: {
       opacity: 0.45,
@@ -73,14 +86,14 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui'], mode: Return
       letterSpacing: 0.8,
     },
     pressed: {
-      shadowOpacity: 0,
+      boxShadow: [],
       transform: [{ translateX: 1 }, { translateY: 1 }],
     },
     primary: {
-      backgroundColor: colors.buttonPrimary,
+      backgroundColor: mode === 'dark' ? DARK_BUTTON_FILL : colors.buttonPrimary,
     },
     secondary: {
-      backgroundColor: mode === 'dark' ? DARK_GREY_BUTTON_FILL : colors.buttonSecondary,
+      backgroundColor: mode === 'dark' ? DARK_BUTTON_FILL : colors.buttonSecondary,
     },
     square: {
       height: 56,

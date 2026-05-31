@@ -27,9 +27,12 @@ const rawEnv = envSchema.parse({
 
 const directApiBaseUrl = rawEnv.EXPO_PUBLIC_API_BASE_URL?.replace(/\/$/, '') ?? '';
 const configuredWebApiProxyUrl = rawEnv.EXPO_PUBLIC_WEB_API_PROXY_URL?.replace(/\/$/, '') ?? '';
+const apiBaseUrl = Platform.OS === 'web'
+  ? configuredWebApiProxyUrl || directApiBaseUrl
+  : directApiBaseUrl || configuredWebApiProxyUrl;
 
 export const env = {
-  apiBaseUrl: configuredWebApiProxyUrl || directApiBaseUrl,
+  apiBaseUrl,
   appEnv: rawEnv.EXPO_PUBLIC_APP_ENV ?? 'development',
   directApiBaseUrl,
   firebaseApiKey: rawEnv.EXPO_PUBLIC_FIREBASE_API_KEY ?? '',

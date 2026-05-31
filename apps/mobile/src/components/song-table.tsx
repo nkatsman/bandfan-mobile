@@ -19,6 +19,7 @@ import { DS } from '../design/ds';
 import { spacing, typeScale } from '../design/tokens';
 import { useAppTheme } from '../design/theme';
 import { addSongToUserPlaylist, fetchUserPlaylists, userPlaylistsQueryDefaults, userPlaylistsQueryKey } from '../features/playlists/playlists-api';
+import { getCachedImageSrc } from '../lib/image-cache';
 import { useMusicStore } from '../state/music-store';
 import { usePlayerStore } from '../state/player-store';
 import { Playlist, Song } from '../types/music';
@@ -30,10 +31,11 @@ type SongTableProps = {
   filterMode?: SongTableFilterMode;
   isLoading?: boolean;
   loadingDotCount?: number;
+  hideLikeColumn?: boolean;
+  hideVoteColumn?: boolean;
   menuContext?: 'default' | 'favorites' | 'voted';
   likePendingForSong?: (songId: string) => boolean;
   onFilterModeChange?: (mode: SongTableFilterMode) => void;
-  onSongRowPress?: (song: Song) => void;
   songs: Song[];
   onSearchQueryChange?: (query: string) => void;
   votePendingForSong?: (songId: string) => boolean;
@@ -56,8 +58,14 @@ const MORE_CELL_WIDTH = 40;
 const ROW_SIDE_GAP = 8;
 const SHOW_REPORT_ACTION = false;
 const LIGHT_PLAY_CONTROL_FILL = '#FFFFFF';
-const LIGHT_PLAY_CONTROL_STROKE = '#222220';
+const LIGHT_PLAY_CONTROL_STROKE = '#222222';
 const LIGHT_PLAY_CONTROL_SHADOW = '#000000';
+const DARK_CONTROL_TEXT = '#FFFFFF';
+const DARK_SEARCH_INPUT_FILL = '#1A1A19';
+const DARK_COVER_ART_BORDER = '#1A1A19';
+const DARK_BORDER_COLOR = '#1A1A19';
+const DARK_VOTE_ICON_COLOR = '#4C79AE';
+const THREE_DOT_MENU_Z_INDEX = 3000;
 
 function getNextFilterMode(current: SongTableFilterMode) {
   const currentIndex = FILTER_CYCLE.indexOf(current);
@@ -104,13 +112,14 @@ function getSortLabel(mode: SongTableSortMode) {
 export function SongTable({
   controlsEnabled = false,
   filterMode = 'all',
+  hideLikeColumn = false,
+  hideVoteColumn = false,
   isLoading = false,
   loadingDotCount,
   menuContext = 'default',
   likePendingForSong,
   onFilterModeChange,
   onPlaySong,
-  onSongRowPress,
   onSearchQueryChange,
   onSortModeChange,
   onToggleLikeSong,
@@ -123,11 +132,14 @@ export function SongTable({
   const theme = useAppTheme();
   const queryClient = useQueryClient();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const isDark = theme.mode === 'dark';
+  const voteIconColor = isDark ? DARK_VOTE_ICON_COLOR : theme.ui.buttonVoteActive;
   const addSongToPlaylistLocal = useMusicStore((state) => state.addSongToUserPlaylist);
   const replaceUserPlaylists = useMusicStore((state) => state.replaceUserPlaylists);
   const activeSong = usePlayerStore((state) => state.activeSong);
   const addSongToQueue = usePlayerStore((state) => state.addToQueue);
   const isPlaying = usePlayerStore((state) => state.isPlaying);
+  const openFullPlayer = usePlayerStore((state) => state.openFullPlayer);
   const togglePlayback = usePlayerStore((state) => state.togglePlayback);
   const storedUserPlaylists = useMusicStore((state) => state.playlists).filter((playlist) => playlist.kind === 'user');
   const [menuSongId, setMenuSongId] = useState<string | null>(null);
@@ -180,7 +192,7 @@ export function SongTable({
       {controlsEnabled ? (
         <View style={styles.controlsRow}>
           <View style={styles.searchShell}>
-            <SearchIcon height={16} width={16} />
+            <SearchIcon color={theme.mode === 'dark' ? DARK_CONTROL_TEXT : theme.ui.textPrimary} height={16} width={16} />
             <TextInput
               onChangeText={onSearchQueryChange}
               placeholder="Search"
@@ -212,8 +224,8 @@ export function SongTable({
         <View style={styles.moreHeader} />
         <View style={styles.artHeaderSpacer} />
         <Text style={[styles.headerLabel, styles.songHeader]}>Song</Text>
-        <Text style={[styles.headerLabel, styles.voteHeader]}>Vote</Text>
-        <Text style={[styles.headerLabel, styles.likeHeader]}>Like</Text>
+        {!hideVoteColumn ? <Text style={[styles.headerLabel, styles.voteHeader]}>Vote</Text> : null}
+        {!hideLikeColumn ? <Text style={[styles.headerLabel, styles.likeHeader]}>Like</Text> : null}
         <Text style={[styles.headerLabel, styles.playHeader]}>Play</Text>
       </View>
 
@@ -245,12 +257,12 @@ export function SongTable({
                 onPress={() => {
                   setMenuSongId(null);
                   onPlaySong(song);
-                  onSongRowPress?.(song);
+                  openFullPlayer();
                 }}
                 style={({ pressed }) => [styles.songPressContent, pressed && styles.pressed]}
               >
                 {song.coverArtUrl ? (
-                  <Image source={{ uri: song.coverArtUrl }} style={styles.artworkImage} />
+                  <Image source={{ uri: getCachedImageSrc(song.coverArtUrl) }} style={styles.artworkImage} />
                 ) : (
                   <View style={styles.artworkFallback}>
                     <CoverArtPlaceholder height={42} width={42} />
@@ -270,23 +282,27 @@ export function SongTable({
               </Pressable>
             </View>
 
-            <Pressable
-              accessibilityRole="button"
-              disabled={!onToggleVoteSong || votePending}
-              onPress={() => onToggleVoteSong?.(song)}
-              style={({ pressed }) => [styles.iconCell, styles.voteCell, pressed && styles.pressed, votePending && styles.disabled]}
-            >
-              {song.voted ? <TriangleFilledIcon color="#6EA06E" height={20} width={20} /> : <TriangleOutlineIcon height={20} width={20} />}
-            </Pressable>
+            {!hideVoteColumn ? (
+              <Pressable
+                accessibilityRole="button"
+                disabled={!onToggleVoteSong || votePending}
+                onPress={() => onToggleVoteSong?.(song)}
+                style={({ pressed }) => [styles.iconCell, styles.voteCell, pressed && styles.pressed, votePending && styles.disabled]}
+              >
+                {song.voted ? <TriangleFilledIcon color={voteIconColor} height={20} width={20} /> : <TriangleOutlineIcon color={voteIconColor} height={20} width={20} />}
+              </Pressable>
+            ) : null}
 
-            <Pressable
-              accessibilityRole="button"
-              disabled={!onToggleLikeSong || likePending}
-              onPress={() => onToggleLikeSong?.(song)}
-              style={({ pressed }) => [styles.iconCell, styles.likeCell, pressed && styles.pressed, likePending && styles.disabled]}
-            >
-              {song.liked ? <HeartFilledIcon color="#CD4B4B" height={22} width={22} /> : <HeartOutlineIcon height={22} width={22} />}
-            </Pressable>
+            {!hideLikeColumn ? (
+              <Pressable
+                accessibilityRole="button"
+                disabled={!onToggleLikeSong || likePending}
+                onPress={() => onToggleLikeSong?.(song)}
+                style={({ pressed }) => [styles.iconCell, styles.likeCell, pressed && styles.pressed, likePending && styles.disabled]}
+              >
+                {song.liked ? <HeartFilledIcon color={theme.ui.buttonLikeActive} height={22} width={22} /> : <HeartOutlineIcon height={22} width={22} />}
+              </Pressable>
+            ) : null}
 
             <Pressable
               accessibilityRole="button"
@@ -298,7 +314,7 @@ export function SongTable({
 
                 onPlaySong(song);
               }}
-              style={({ pressed }) => [styles.playCell, isActiveSong && isPlaying && styles.playCellActive, pressed && styles.pressed]}
+              style={({ pressed }) => [styles.playCell, pressed && styles.pressed]}
             >
               {isActiveSong && isPlaying ? <PauseIcon color={LIGHT_PLAY_CONTROL_STROKE} height={30} width={30} /> : <PlayIcon color={LIGHT_PLAY_CONTROL_STROKE} height={34} width={34} />}
             </Pressable>
@@ -333,12 +349,12 @@ export function SongTable({
                     <MenuAction icon={<PlaylistIcon height={16} width={16} />} label="Add to playlist" onPress={() => setMenuView('playlists')} styles={styles} />
                     <MenuAction icon={<PlayIcon height={16} width={16} />} label="Add to queue" onPress={() => { addSongToQueue(song); closeMenu(); }} styles={styles} />
                     {menuContext === 'favorites' ? (
-                      <MenuAction icon={<HeartFilledIcon color="#CD4B4B" height={16} width={16} />} label="Remove from favorites" onPress={() => { onToggleLikeSong?.(song); closeMenu(); }} styles={styles} />
+                      <MenuAction icon={<HeartFilledIcon color={theme.ui.buttonLikeActive} height={16} width={16} />} label="Remove from favorites" onPress={() => { onToggleLikeSong?.(song); closeMenu(); }} styles={styles} />
                     ) : (
-                      <MenuAction icon={song.liked ? <HeartFilledIcon color="#CD4B4B" height={16} width={16} /> : <HeartOutlineIcon height={16} width={16} />} label={song.liked ? 'Remove from favorites' : 'Add to favorites'} onPress={() => { onToggleLikeSong?.(song); closeMenu(); }} styles={styles} />
+                      <MenuAction icon={song.liked ? <HeartFilledIcon color={theme.ui.buttonLikeActive} height={16} width={16} /> : <HeartOutlineIcon height={16} width={16} />} label={song.liked ? 'Remove from favorites' : 'Add to favorites'} onPress={() => { onToggleLikeSong?.(song); closeMenu(); }} styles={styles} />
                     )}
                     {menuContext !== 'voted' ? (
-                      <MenuAction icon={song.voted ? <TriangleFilledIcon color={theme.ui.buttonVoteActive} height={16} width={16} /> : <TriangleOutlineIcon height={16} width={16} />} label={song.voted ? 'Unvote' : 'Vote for release'} onPress={() => { onToggleVoteSong?.(song); closeMenu(); }} styles={styles} />
+                      <MenuAction icon={song.voted ? <TriangleFilledIcon color={voteIconColor} height={16} width={16} /> : <TriangleOutlineIcon color={voteIconColor} height={16} width={16} />} label={song.voted ? 'Unvote' : 'Vote for release'} onPress={() => { onToggleVoteSong?.(song); closeMenu(); }} styles={styles} />
                     ) : null}
                     {SHOW_REPORT_ACTION ? <MenuAction icon={<FileTextIcon height={16} width={16} />} label="Report song" onPress={() => { closeMenu(); }} styles={styles} /> : null}
                   </>
@@ -438,19 +454,20 @@ const sharedStyles = StyleSheet.create({
 
 function createStyles(theme: ReturnType<typeof useAppTheme>) {
   const { semantic, ui } = theme;
+  const isDark = theme.mode === 'dark';
 
   return StyleSheet.create({
     artworkFallback: {
       alignItems: 'center',
       backgroundColor: ui.surfaceCard,
-      borderColor: ui.borderStrong,
+      borderColor: isDark ? DARK_COVER_ART_BORDER : ui.borderStrong,
       borderWidth: 2,
       height: SONG_IDENTITY_BLOCK_HEIGHT,
       justifyContent: 'center',
       width: SONG_IDENTITY_BLOCK_HEIGHT,
     },
     artworkImage: {
-      borderColor: ui.borderStrong,
+      borderColor: isDark ? DARK_COVER_ART_BORDER : ui.borderStrong,
       borderWidth: 2,
       height: SONG_IDENTITY_BLOCK_HEIGHT,
       width: SONG_IDENTITY_BLOCK_HEIGHT,
@@ -470,7 +487,7 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
     controlButton: {
       alignItems: 'center',
       backgroundColor: ui.buttonPrimary,
-      borderColor: ui.borderStrong,
+      borderColor: isDark ? DARK_BORDER_COLOR : ui.borderStrong,
       borderWidth: 2,
       flexDirection: 'row',
       justifyContent: 'flex-start',
@@ -479,7 +496,7 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
       paddingHorizontal: spacing.sm,
     },
     controlButtonLabel: {
-      color: ui.textPrimary,
+      color: isDark ? DARK_CONTROL_TEXT : ui.textPrimary,
       fontFamily: 'IBMPlexMono',
       fontSize: typeScale.small,
       fontWeight: '900',
@@ -494,7 +511,7 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
     },
     headerRow: {
       alignItems: 'center',
-      backgroundColor: semantic.colors.tableHeader,
+      backgroundColor: 'transparent',
       flexDirection: 'row',
       minHeight: 40,
       paddingHorizontal: spacing.sm,
@@ -517,20 +534,13 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
     playCell: {
       alignItems: 'center',
       backgroundColor: LIGHT_PLAY_CONTROL_FILL,
-      borderColor: LIGHT_PLAY_CONTROL_STROKE,
-      borderWidth: DS.stroke.fine,
+      borderWidth: 0,
+      boxShadow: `inset 0 0 0 ${DS.stroke.fine}px ${LIGHT_PLAY_CONTROL_STROKE}, 2px 2px 0px ${LIGHT_PLAY_CONTROL_SHADOW}`,
       height: 44,
       justifyContent: 'center',
       marginLeft: TABLE_INLINE_GAP,
-      shadowColor: LIGHT_PLAY_CONTROL_SHADOW,
-      shadowOffset: { width: 2, height: 2 },
-      shadowOpacity: 1,
-      shadowRadius: 0,
+      overflow: 'hidden',
       width: 44,
-    },
-    playCellActive: {
-      shadowOpacity: 0,
-      transform: [{ translateX: 2 }, { translateY: 2 }],
     },
     moreCell: {
       alignItems: 'center',
@@ -543,13 +553,13 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
       width: MORE_CELL_WIDTH,
     },
     pressed: {
-      shadowOpacity: 0,
+      boxShadow: [],
       transform: [{ translateX: 1 }, { translateY: 1 }],
     },
     row: {
       alignItems: 'center',
       backgroundColor: semantic.colors.tableRowFill,
-      borderColor: ui.borderStrong,
+      borderColor: isDark ? DARK_BORDER_COLOR : ui.borderStrong,
       borderWidth: 2,
       flexDirection: 'row',
       minHeight: 64,
@@ -565,23 +575,20 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
     },
     rowMenu: {
       backgroundColor: ui.surfaceCard,
-      borderColor: ui.borderStrong,
+      borderColor: isDark ? DARK_BORDER_COLOR : ui.borderStrong,
       borderWidth: 2,
+      boxShadow: '4px 4px 0px #000000',
       minWidth: 196,
       position: 'absolute',
       left: ROW_SIDE_GAP + 2,
-      shadowColor: '#000000',
-      shadowOffset: { width: 2, height: 2 },
-      shadowOpacity: 1,
-      shadowRadius: 0,
       top: 46,
-      zIndex: 1000,
+      zIndex: THREE_DOT_MENU_Z_INDEX,
     },
     rowMenuOpen: {
-      zIndex: 1000,
+      zIndex: THREE_DOT_MENU_Z_INDEX,
     },
     rowMenuAction: {
-      borderBottomColor: ui.borderStrong,
+      borderBottomColor: isDark ? DARK_BORDER_COLOR : ui.borderStrong,
       borderBottomWidth: 1,
       alignItems: 'center',
       flexDirection: 'row',
@@ -606,8 +613,8 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
     },
     searchShell: {
       alignItems: 'center',
-      backgroundColor: ui.surfaceCard,
-      borderColor: ui.borderStrong,
+      backgroundColor: isDark ? DARK_SEARCH_INPUT_FILL : ui.surfaceCard,
+      borderColor: isDark ? DARK_BORDER_COLOR : ui.borderStrong,
       borderWidth: 2,
       flex: 1,
       flexDirection: 'row',
@@ -616,7 +623,7 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
       paddingHorizontal: spacing.sm,
     },
     searchInput: {
-      color: ui.textPrimary,
+      color: isDark ? DARK_CONTROL_TEXT : ui.textPrimary,
       flex: 1,
       fontFamily: DS.font.family,
       fontSize: typeScale.body,
@@ -700,7 +707,7 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
       fontWeight: '900',
     },
     statusDot: {
-      borderColor: ui.borderStrong,
+      borderColor: isDark ? DARK_BORDER_COLOR : ui.borderStrong,
       borderWidth: 1,
       borderRadius: 999,
       flexShrink: 0,
@@ -727,7 +734,7 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
       position: 'absolute',
       right: 0,
       top: 0,
-      zIndex: 900,
+      zIndex: THREE_DOT_MENU_Z_INDEX - 1,
     },
     statusModalRoot: {
       alignItems: 'center',

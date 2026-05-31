@@ -20,7 +20,7 @@ export function ScreenShell({ children, footerInset = 196, logoPress = 'none', s
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const theme = useAppTheme();
   const toggleMode = useThemeStore((state) => state.toggleMode);
-  const styles = useMemo(() => createStyles(theme.ui, theme.uiSpacing), [theme]);
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const BrandLogo = theme.mode === 'dark' ? LogoDark : LogoLight;
 
   const handleLogoPress = () => {
@@ -52,7 +52,11 @@ export function ScreenShell({ children, footerInset = 196, logoPress = 'none', s
   );
 }
 
-function createStyles(colors: ReturnType<typeof useAppTheme>['ui'], intervals: ReturnType<typeof useAppTheme>['uiSpacing']) {
+function createStyles(theme: ReturnType<typeof useAppTheme>) {
+  const colors = theme.ui;
+  const intervals = theme.uiSpacing;
+  const buttonBorder = theme.mode === 'dark' ? '#1A1A19' : colors.borderStrong;
+
   return StyleSheet.create({
     buttonPressed: {
       transform: [{ translateX: 1 }, { translateY: 1 }],
@@ -75,7 +79,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui'], intervals: R
     logoButton: {
       alignItems: 'center',
       backgroundColor: colors.surfaceCard,
-      borderColor: colors.borderStrong,
+      borderColor: buttonBorder,
       borderRadius: radii.md,
       borderWidth: 3,
       justifyContent: 'center',
@@ -93,7 +97,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui'], intervals: R
     menuButton: {
       alignItems: 'center',
       backgroundColor: colors.surfaceGrouped,
-      borderColor: colors.borderStrong,
+      borderColor: buttonBorder,
       borderRadius: radii.md,
       borderWidth: 3,
       justifyContent: 'center',

@@ -1,5 +1,6 @@
 import { PropsWithChildren, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import BFDarkLogo from '../../assets/BandFan/BF Dark - No Card.svg';
 import BFLightLogo from '../../assets/BandFan/BF Light - No Card.svg';
@@ -15,12 +16,14 @@ type ScreenHeaderProps = PropsWithChildren<{
   title: string;
 }>;
 
-const LOGO_BUTTON_SIZE = 135;
+export const LOGO_BUTTON_SIZE = 135;
+export const LOGO_BUTTON_SHADOW_SIZE = 4;
 const LOGO_SIZE = 88;
 
 export function ScreenHeader({ actionsPlacement = 'wrap', children, counter, logoAccessibilityLabel = 'Open menu', onLogoPress, title }: ScreenHeaderProps) {
   const theme = useAppTheme();
-  const styles = useMemo(() => createStyles(theme.ui), [theme]);
+  const insets = useSafeAreaInsets();
+  const styles = useMemo(() => createStyles(theme, insets.top), [insets.top, theme]);
   const BFLogo = theme.mode === 'dark' ? BFDarkLogo : BFLightLogo;
   const hasControls = Boolean(children);
 
@@ -50,7 +53,11 @@ export function ScreenHeader({ actionsPlacement = 'wrap', children, counter, log
   );
 }
 
-function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
+function createStyles(theme: ReturnType<typeof useAppTheme>, safeTopInset: number) {
+  const colors = theme.ui;
+  const isDark = theme.mode === 'dark';
+  const buttonBorder = isDark ? '#1A1A19' : colors.borderStrong;
+
   return StyleSheet.create({
     controlsWrap: {
       flexDirection: 'row',
@@ -60,6 +67,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
     headerBlock: {
       paddingBottom: spacing.sm,
       paddingHorizontal: spacing.sm,
+      paddingTop: Math.max(spacing.xs, safeTopInset),
     },
     headerRow: {
       alignItems: 'stretch',
@@ -68,15 +76,12 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
     },
     logoButton: {
       alignItems: 'center',
-      backgroundColor: colors.surfaceCard,
-      borderColor: colors.borderStrong,
+      backgroundColor: isDark ? colors.buttonPrimary : colors.surfaceCard,
+      borderColor: buttonBorder,
       borderWidth: 2,
+      boxShadow: `${LOGO_BUTTON_SHADOW_SIZE}px ${LOGO_BUTTON_SHADOW_SIZE}px 0px #000000`,
       justifyContent: 'center',
       height: LOGO_BUTTON_SIZE,
-      shadowColor: '#000000',
-      shadowOffset: { width: 4, height: 4 },
-      shadowOpacity: 1,
-      shadowRadius: 0,
       width: LOGO_BUTTON_SIZE,
     },
     mainColumn: {
@@ -104,7 +109,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
       fontWeight: '900',
     },
     pressed: {
-      shadowOpacity: 0,
+      boxShadow: [],
       transform: [{ translateX: 1 }, { translateY: 1 }],
     },
     titleStack: {

@@ -12,8 +12,9 @@ const TOP_BORDER_THICKNESS = 3;
 const ROOT_BOTTOM_PAD = 0;
 const BUTTON_BOTTOM_PAD = 18;
 const BUTTON_TOP_PAD = 18;
-const MENU_OCHER = '#E4C87E';
+const MENU_OCHER = '#E7BF7B';
 const MENU_BLACK = '#1A1A19';
+const BOTTOM_MENU_Z_INDEX = 7000;
 
 type MenuItem = {
   key: string;
@@ -74,6 +75,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     paddingTop: 0,
     position: 'relative',
+    zIndex: BOTTOM_MENU_Z_INDEX,
   },
   topStrip: {
     backgroundColor: MENU_BLACK,

@@ -46,13 +46,13 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
     switchRoot: {
       borderColor: switchBorderColor,
       borderWidth: 2,
-      height: 34, // Total height to accommodate thumb and labels
+      height: 38,
       flexShrink: 0,
       marginHorizontal: 2,
       marginVertical: 2,
       overflow: 'visible',
       position: 'relative',
-      width: 66, // Total width to accommodate thumb and labels
+      width: 76,
     },
     switchOff: {
       backgroundColor: switchTrackColor,
@@ -64,25 +64,25 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
       fontFamily: 'IBMPlexMono',
       fontSize: 12,
       fontWeight: '600',
-      height: 20, // Vertical "ON" position
+      height: 24,
       includeFontPadding: false,
-      lineHeight: 28,
+      lineHeight: 24,
       textAlign: 'center',
     },
     stateLabelSlot: {
       alignItems: 'center',
-      height: 24, // Vertical "OFF" position
+      height: 34,
       justifyContent: 'center',
       position: 'absolute',
       zIndex: 0,
     },
     stateLabelSlotOff: {
-      left: 36,
-      width: 22, // Horizontal "OFF" position
+      left: 37,
+      width: 34,
     },
     stateLabelSlotOn: {
-      left: -1,
-      width: 32, // Horizontal "ON" position
+      left: 2,
+      width: 30,
     },
     stateLabelOff: {
       color: colors.buttonDanger,
@@ -94,18 +94,18 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
       backgroundColor: colors.surfaceCard,
       borderColor: switchBorderColor,
       borderWidth: 2,
-      height: 35, // Thumb length
+      height: 38,
       position: 'absolute',
       top: '50%',
-      transform: [{ translateY: -17.5 }], // Vertical thumb position
-      width: 35, // Thumb width
+      transform: [{ translateY: -19 }],
+      width: 38,
       zIndex: 1,
     },
-    thumbOff: { // Horizontal thumb position when switch is off
+    thumbOff: {
       left: -3,
     },
     thumbOn: {
-      left: 31,
+      left: 39,
     },
   });
 }

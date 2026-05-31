@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
-import { Alert, Image, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, PanResponder, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import CoverArtPlaceholder from '../../../assets/BandFan/BF Cover Art Placeholder.svg';
 import LogoDark from '../../../assets/BandFan/BandFan - Logo Dark.svg';
@@ -26,6 +27,7 @@ import { DS } from '../../design/ds';
 import getStatusBadgeStyle, { getStatusDisplayLabel } from '../../design/status-badges';
 import { useAppTheme } from '../../design/theme';
 import { spacing, typeScale } from '../../design/tokens';
+import { getCachedImageSrc } from '../../lib/image-cache';
 import { addSongToUserPlaylist, fetchUserPlaylists, removeSongFromUserPlaylist, userPlaylistsQueryDefaults, userPlaylistsQueryKey } from '../playlists/playlists-api';
 import { useMusicStore } from '../../state/music-store';
 import { usePlayerStore } from '../../state/player-store';
@@ -47,11 +49,15 @@ const ROUTE_BY_KEY = {
   playlists: '/(tabs)/playlists',
 } as const;
 
-const LIGHT_PLAY_CONTROL_STROKE = '#222220';
+const LIGHT_PLAY_CONTROL_STROKE = '#222222';
+const MISSING_COVER_COPY = 'No cover art yet.';
+const DARK_VOTE_ICON_COLOR = '#4C79AE';
+const BIG_PLAYER_Z_INDEX = 5000;
 
 type FullPlayerPanelProps = {
   includeBottomMenu?: boolean;
   onCollapse?: () => void;
+  onNavigate?: () => void;
 };
 
 export function PlayerScreen() {
@@ -72,8 +78,10 @@ export function PlayerScreen() {
   );
 }
 
-export function FullPlayerPanel({ includeBottomMenu = false, onCollapse }: FullPlayerPanelProps) {
+export function FullPlayerPanel({ includeBottomMenu = false, onCollapse, onNavigate }: FullPlayerPanelProps) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const theme = useAppTheme();
   const queryClient = useQueryClient();
   const activeSong = usePlayerStore((state) => state.activeSong);
@@ -96,10 +104,11 @@ export function FullPlayerPanel({ includeBottomMenu = false, onCollapse }: FullP
   const { isSongLikePending, toggleSongLike } = useSongLikeAction();
   const { isSongReleaseSupportPending, toggleSongReleaseSupport } = useSongReleaseSupportAction();
   const [isPlaylistMenuOpen, setPlaylistMenuOpen] = useState(false);
-  const styles = useMemo(() => createStyles(theme.ui, theme.mode), [theme]);
+  const styles = useMemo(() => createStyles(theme.ui, theme.mode, screenWidth, screenHeight, insets.top), [insets.top, screenHeight, screenWidth, theme]);
   const badgeStyle = activeSong ? getStatusBadgeStyle(activeSong.sourceLabel) : null;
   const elapsedLabel = activeSong ? getElapsedLabel(activeSong.durationLabel, progressPercent) : '00:00';
   const Logo = theme.mode === 'light' ? LogoLight : LogoDark;
+  const voteIconColor = theme.mode === 'dark' ? DARK_VOTE_ICON_COLOR : theme.ui.buttonVoteActive;
   const playlistsQuery = useQuery({
     enabled: Boolean(isPlaylistMenuOpen && activeSong),
     queryFn: fetchUserPlaylists,
@@ -134,9 +143,11 @@ export function FullPlayerPanel({ includeBottomMenu = false, onCollapse }: FullP
     },
   });
   const panResponder = useMemo(() => PanResponder.create({
-    onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 14 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx),
+    onMoveShouldSetPanResponderCapture: (_, gestureState) => gestureState.dy > 8 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx) * 1.2,
+    onMoveShouldSetPanResponder: (_, gestureState) => gestureState.dy > 8 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx) * 1.2,
+    onPanResponderTerminationRequest: () => false,
     onPanResponderRelease: (_, gestureState) => {
-      if (gestureState.dy > 72) {
+      if (gestureState.dy > 42 || gestureState.vy > 0.85) {
         onCollapse?.();
       }
     },
@@ -159,9 +170,10 @@ export function FullPlayerPanel({ includeBottomMenu = false, onCollapse }: FullP
           <>
             <View style={styles.coverWrap}>
               {activeSong.coverArtUrl ? (
-                <Image resizeMode="cover" source={{ uri: activeSong.coverArtUrl }} style={styles.coverArt} />
+                <Image resizeMode="cover" source={{ uri: getCachedImageSrc(activeSong.coverArtUrl) }} style={styles.coverArt} />
               ) : (
                 <View style={styles.coverFallback}>
+                  <Text style={styles.coverFallbackText}>{MISSING_COVER_COPY}</Text>
                   <CoverArtPlaceholder height="100%" width="100%" />
                 </View>
               )}
@@ -174,17 +186,17 @@ export function FullPlayerPanel({ includeBottomMenu = false, onCollapse }: FullP
                   <Text numberOfLines={1} style={styles.title}>{activeSong.title}</Text>
                   {badgeStyle ? (
                     <View style={[styles.badge, { backgroundColor: badgeStyle.fillColor }]}> 
-                      <Text style={styles.badgeText}>{getStatusDisplayLabel(activeSong.sourceLabel)}</Text>
+                      <Text style={[styles.badgeText, { color: badgeStyle.textColor }]}>{getStatusDisplayLabel(activeSong.sourceLabel)}</Text>
                     </View>
                   ) : null}
                 </View>
               </View>
               <View style={styles.songActions}>
                 <Pressable accessibilityRole="button" disabled={isSongReleaseSupportPending(activeSong.id)} onPress={() => toggleSongReleaseSupport(activeSong)} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
-                  {activeSong.voted ? <TriangleFilledIcon color={theme.ui.buttonVoteActive} height={28} width={28} /> : <TriangleOutlineIcon color={theme.ui.textPrimary} height={28} width={28} />}
+                  {activeSong.voted ? <TriangleFilledIcon color={voteIconColor} height={28} width={28} /> : <TriangleOutlineIcon color={voteIconColor} height={28} width={28} />}
                 </Pressable>
                 <Pressable accessibilityRole="button" disabled={isSongLikePending(activeSong.id)} onPress={() => toggleSongLike(activeSong)} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
-                  {activeSong.liked ? <HeartFilledIcon color="#EF4343" height={28} width={28} /> : <HeartIcon color={theme.ui.textPrimary} height={28} width={28} />}
+                  {activeSong.liked ? <HeartFilledIcon color={theme.ui.buttonLikeActive} height={28} width={28} /> : <HeartIcon color={theme.ui.textPrimary} height={28} width={28} />}
                 </Pressable>
               </View>
             </View>
@@ -248,6 +260,7 @@ export function FullPlayerPanel({ includeBottomMenu = false, onCollapse }: FullP
             const route = ROUTE_BY_KEY[key as keyof typeof ROUTE_BY_KEY];
 
             if (route) {
+              onNavigate?.();
               router.replace(route);
             }
           }}
@@ -291,41 +304,60 @@ function getElapsedLabel(durationLabel: string, progressPercent: number) {
   return formatSeconds((Math.max(0, Math.min(100, progressPercent)) / 100) * totalSeconds);
 }
 
-function createStyles(colors: ReturnType<typeof useAppTheme>['ui'], mode: ReturnType<typeof useAppTheme>['mode']) {
+function createStyles(colors: ReturnType<typeof useAppTheme>['ui'], mode: ReturnType<typeof useAppTheme>['mode'], screenWidth: number, screenHeight: number, safeTopInset: number) {
   const isDark = mode === 'dark';
+  const coverArtBorder = isDark ? '#1A1A19' : '#222222';
+  const coverSize = Math.round(Math.min(screenWidth - spacing.md * 2, Math.max(260, screenHeight * 0.42), 480));
+  const transportWidth = Math.min(coverSize, 376);
 
   return StyleSheet.create({
     page: {
-      backgroundColor: isDark ? '#222220' : '#FFF9EF',
+      backgroundColor: isDark ? '#222222' : '#FFF9EF',
       flex: 1,
       justifyContent: 'flex-end',
+      zIndex: BIG_PLAYER_Z_INDEX,
     },
     playerArea: {
       flex: 1,
       justifyContent: 'center',
-      paddingHorizontal: spacing.xl,
-      paddingTop: spacing.xl,
+      paddingHorizontal: spacing.md,
+      paddingTop: Math.max(spacing.md, safeTopInset),
     },
     coverWrap: {
       alignSelf: 'center',
-      aspectRatio: 1,
+      height: coverSize,
       marginBottom: spacing.xl,
-      maxWidth: 360,
-      width: '100%',
+      width: coverSize,
     },
     coverArt: {
-      borderColor: isDark ? '#474747' : '#222220',
+      borderColor: coverArtBorder,
       borderWidth: 2,
       height: '100%',
       width: '100%',
     },
     coverFallback: {
+      alignItems: 'center',
       backgroundColor: colors.surfaceCard,
-      borderColor: isDark ? '#474747' : '#222220',
+      borderColor: coverArtBorder,
       borderWidth: 2,
       height: '100%',
+      justifyContent: 'center',
       overflow: 'hidden',
+      position: 'relative',
       width: '100%',
+    },
+    coverFallbackText: {
+      color: isDark ? '#F4F4F4' : '#222222',
+      fontFamily: DS.font.family,
+      fontSize: typeScale.small,
+      fontWeight: '900',
+      left: spacing.sm,
+      lineHeight: 16,
+      position: 'absolute',
+      right: spacing.sm,
+      textAlign: 'center',
+      top: spacing.sm,
+      zIndex: 2,
     },
     metaActionRow: {
       alignItems: 'flex-end',
@@ -353,14 +385,14 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui'], mode: Return
       minWidth: 0,
     },
     title: {
-      color: isDark ? '#F4F4F4' : '#222220',
+      color: isDark ? '#F4F4F4' : '#222222',
       flexShrink: 1,
       fontFamily: DS.font.family,
       fontSize: typeScale.body,
       fontWeight: '900',
     },
     badge: {
-      borderColor: isDark ? '#F4F4F4' : '#222220',
+      borderColor: '#222222',
       borderRadius: 999,
       borderWidth: 1,
       paddingHorizontal: 7,
@@ -400,9 +432,11 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui'], mode: Return
       fontWeight: '500',
     },
     transportRow: {
+      alignSelf: 'center',
       alignItems: 'center',
       flexDirection: 'row',
       justifyContent: 'space-between',
+      width: transportWidth,
       zIndex: 3,
     },
     smallIconButton: {
@@ -415,23 +449,20 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui'], mode: Return
     },
     smallIconButtonActive: {
       backgroundColor: '#FFFFFF',
-      borderColor: isDark ? '#F4F4F4' : '#222220',
+      borderColor: isDark ? '#F4F4F4' : '#222222',
     },
     playButton: {
       alignItems: 'center',
       backgroundColor: '#FFFFFF',
-      borderColor: '#222220',
-      borderWidth: 4,
+      borderWidth: 0,
+      boxShadow: 'inset 0 0 0 4px #222222, 5px 5px 0px #000000',
       height: 72,
       justifyContent: 'center',
-      shadowColor: '#000000',
-      shadowOffset: { width: 4, height: 4 },
-      shadowOpacity: 1,
-      shadowRadius: 0,
+      overflow: 'hidden',
       width: 72,
     },
     playPressed: {
-      shadowOpacity: 0,
+      boxShadow: [],
       transform: [{ translateX: 2 }, { translateY: 2 }],
     },
     pressed: {
@@ -456,21 +487,18 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui'], mode: Return
     playlistMenu: {
       alignSelf: 'flex-start',
       backgroundColor: colors.surfaceCard,
-      borderColor: colors.borderStrong,
+      borderColor: isDark ? '#1A1A19' : colors.borderStrong,
       borderWidth: 2,
       bottom: 84,
+      boxShadow: '4px 4px 0px #000000',
       left: spacing.xl,
       minWidth: 230,
       position: 'absolute',
-      shadowColor: '#000000',
-      shadowOffset: { width: 2, height: 2 },
-      shadowOpacity: 1,
-      shadowRadius: 0,
       zIndex: 5,
     },
     playlistMenuAction: {
       alignItems: 'center',
-      borderBottomColor: colors.borderStrong,
+      borderBottomColor: isDark ? '#1A1A19' : colors.borderStrong,
       borderBottomWidth: 1,
       flexDirection: 'row',
       gap: spacing.xs,

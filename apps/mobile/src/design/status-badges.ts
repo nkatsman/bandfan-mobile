@@ -3,21 +3,21 @@ export type StatusBadgeStyle = {
   textColor: string;
 };
 
-const REF_INK = '#222220';
+const REF_INK = '#222222';
 const REF_WHITE = '#FFFFFF';
 
-const defaultStatusBadgeStyle: StatusBadgeStyle = { fillColor: '#6673D1', textColor: REF_WHITE };
+const defaultStatusBadgeStyle: StatusBadgeStyle = { fillColor: '#8373B3', textColor: REF_WHITE };
 
 const statusBadgeStyles: Record<string, StatusBadgeStyle> = {
   default: defaultStatusBadgeStyle,
-  demo: { fillColor: '#6673D1', textColor: REF_WHITE },
-  discover: { fillColor: '#6673D1', textColor: REF_WHITE },
-  mastered: { fillColor: '#F1B15E', textColor: REF_INK },
-  mixed: { fillColor: '#86ABD6', textColor: REF_INK },
+  demo: { fillColor: '#8373B3', textColor: REF_WHITE },
+  discover: { fillColor: '#8373B3', textColor: REF_WHITE },
+  mastered: { fillColor: '#DFAC53', textColor: REF_INK },
+  mixed: { fillColor: '#8FACCE', textColor: REF_INK },
   recorded: { fillColor: '#6EA06E', textColor: REF_INK },
   recording: { fillColor: '#6EA06E', textColor: REF_INK },
   released: { fillColor: '#EF4343', textColor: REF_WHITE },
-  senttostores: { fillColor: '#E4C87E', textColor: REF_INK },
+  senttostores: { fillColor: '#E7BF7B', textColor: REF_INK },
 };
 
 function normalizeStatusLabel(label: string) {

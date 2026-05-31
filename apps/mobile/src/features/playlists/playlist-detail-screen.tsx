@@ -34,6 +34,7 @@ const BOTTOM_MENU_ITEMS = [
   { key: 'playlists', label: 'PLAYLISTS' },
   { key: 'account', label: 'ACCOUNT' },
 ];
+const SEARCH_FILTER_SORT_Z_INDEX = 4000;
 
 export function PlaylistDetailScreen({ playlistId }: PlaylistDetailScreenProps) {
   const router = useRouter();
@@ -175,12 +176,12 @@ export function PlaylistDetailScreen({ playlistId }: PlaylistDetailScreenProps) 
 
         {isSongsLoading ? (
           <SongTable
+            hideVoteColumn={playlist.id === 'voted'}
             isLoading
             loadingDotCount={loadingDotCount}
             likePendingForSong={isSongLikePending}
             menuContext={playlist.id === 'voted' ? 'voted' : 'default'}
             onPlaySong={(song) => playSelection(viewSongs, song.id, playlist.title.toUpperCase())}
-            onSongRowPress={() => usePlayerStore.getState().openSongSheet()}
             onToggleLikeSong={toggleSongLike}
             onToggleVoteSong={toggleSongReleaseSupport}
             songs={[]}
@@ -188,10 +189,10 @@ export function PlaylistDetailScreen({ playlistId }: PlaylistDetailScreenProps) 
           />
         ) : viewSongs.length > 0 ? (
           <SongTable
+            hideVoteColumn={playlist.id === 'voted'}
             likePendingForSong={isSongLikePending}
             menuContext={playlist.id === 'voted' ? 'voted' : 'default'}
             onPlaySong={(song) => playSelection(viewSongs, song.id, playlist.title.toUpperCase())}
-            onSongRowPress={() => usePlayerStore.getState().openSongSheet()}
             onToggleLikeSong={toggleSongLike}
             onToggleVoteSong={toggleSongReleaseSupport}
             songs={viewSongs}
@@ -243,6 +244,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
     },
     bottomControlsDock: {
       backgroundColor: colors.appBackground,
+      position: 'relative',
+      zIndex: SEARCH_FILTER_SORT_Z_INDEX,
     },
     sectionTitle: {
       color: colors.textPrimary,

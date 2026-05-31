@@ -20,6 +20,8 @@ type DsCardProps = {
   children?: ReactNode;
   /** Exact pixel height of the card face.  Omit for content-driven height. */
   fixedHeight?: number;
+  /** Optional larger visual reservation when the rendered shadow changes size. */
+  reserveShadowSize?: DsShadowSize;
   /** Which shadow preset to use.  Defaults to 'thin' (6 px). */
   shadowSize?: DsShadowSize;
   /** Extra styles applied to the outer wrapper. */
@@ -28,10 +30,11 @@ type DsCardProps = {
   width: number;
 };
 
-export function DsCard({ children, fixedHeight, shadowSize = 'thin', style, width }: DsCardProps) {
+export function DsCard({ children, fixedHeight, reserveShadowSize, shadowSize = 'thin', style, width }: DsCardProps) {
   const theme = useAppTheme();
   const isDark = theme.mode === 'dark';
   const sh = DS.shadow[shadowSize];
+  const reservedShadow = DS.shadow[reserveShadowSize ?? shadowSize];
   const isFixed = fixedHeight !== undefined;
 
   return (
@@ -41,11 +44,11 @@ export function DsCard({ children, fixedHeight, shadowSize = 'thin', style, widt
           alignSelf: 'center',
           // Outer wrapper = card face + shadow offset so alignSelf:'center' centres
           // the full visual element, not just the card face.
-          width: width + sh.x,
+          width: width + reservedShadow.x,
           // Fixed cards: wrapper height = face + shadow so nothing clips.
           // Auto cards: wrapper height = face height (shadow extends below via marginBottom).
-          height: isFixed ? fixedHeight + sh.y : undefined,
-          marginBottom: isFixed ? 0 : sh.y,
+          height: isFixed ? fixedHeight + reservedShadow.y : undefined,
+          marginBottom: isFixed ? 0 : reservedShadow.y,
         },
         style,
       ]}
@@ -71,8 +74,8 @@ export function DsCard({ children, fixedHeight, shadowSize = 'thin', style, widt
       {/* ── Card face ────────────────────────────────────────────────── */}
       <View
         style={{
-          backgroundColor: isDark ? '#333333' : DS.color.cardSurface,
-          borderColor: isDark ? '#474747' : DS.stroke.color,
+          backgroundColor: isDark ? theme.ui.surfaceCard : DS.color.cardSurface,
+          borderColor: isDark ? '#1A1A19' : DS.stroke.color,
           borderWidth: DS.stroke.thick,
           width,
           height: fixedHeight,

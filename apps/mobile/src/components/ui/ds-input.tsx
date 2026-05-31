@@ -2,10 +2,10 @@
  * DsInput — labeled input field following BandFan DS conventions.
  *
  * Label:       bold uppercase, DS body size (16px), ink colour
- * Placeholder: bold, DS body size, progressFill colour (#E4C87E)
+ * Placeholder: bold, DS body size, progressFill colour (#E7BF7B)
  * Typed text:  regular, DS body size, ink colour
  * Background:  DS background (#FFF9EF)
- * Border:      DS fine stroke (2px, #222220)
+ * Border:      DS fine stroke (2px, #222222)
  * Gap below label: DS.layout.fieldLabelGap (7px)
  */
 
@@ -24,13 +24,14 @@ type DsInputProps = TextInputProps & {
 export function DsInput({ label, stackGap = 0, style, ...inputProps }: DsInputProps) {
   const theme = useAppTheme();
   const isDark = theme.mode === 'dark';
+  const placeholderTextColor = inputProps.placeholderTextColor ?? (isDark ? '#6EA06E' : '#8F8F8F');
 
   return (
     <View style={[styles.wrap, stackGap ? { marginBottom: stackGap } : undefined]}>
       <Text style={[styles.label, isDark && styles.labelDark]}>{label.toUpperCase()}</Text>
       <TextInput
         autoCapitalize="none"
-        placeholderTextColor={inputProps.placeholderTextColor ?? (isDark ? '#6EA06E' : DS.color.progressFill)}
+        placeholderTextColor={placeholderTextColor}
         {...inputProps}
         style={[styles.input, isDark && styles.inputDark, style]}
       />
@@ -42,7 +43,7 @@ const styles = StyleSheet.create({
   wrap: {},
 
   label: {
-    color: DS.color.ink,
+    color: '#8F8F8F',
     fontFamily: DS.font.family,
     fontSize: DS.font.size.body,
     fontWeight: DS.font.weight.bold,
@@ -66,8 +67,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   inputDark: {
-    backgroundColor: '#222220',
-    borderColor: '#474747',
+    backgroundColor: '#222222',
+    borderColor: '#1A1A19',
     color: '#6EA06E',
   },
 });

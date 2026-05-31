@@ -17,6 +17,7 @@ import { usePullToRefresh } from '../../components/use-pull-to-refresh';
 import { DS } from '../../design/ds';
 import { spacing, typeScale } from '../../design/tokens';
 import { useAppTheme } from '../../design/theme';
+import { getCachedImageSrc } from '../../lib/image-cache';
 import { queryClient } from '../../lib/query-client';
 import { useMusicStore } from '../../state/music-store';
 import { Playlist, Song } from '../../types/music';
@@ -32,8 +33,10 @@ import {
 
 const STATUS_RELEASED = '#6EA06E';
 const STATUS_PRIVATE = '#474747';
-const STATUS_FOREGROUND = '#222220';
+const STATUS_FOREGROUND = '#222222';
 const STATUS_PRIVATE_FOREGROUND = '#FFF9EF';
+const DARK_VOTE_ICON_COLOR = '#4C79AE';
+const DARK_PLACEHOLDER_COVER_FILL = '#333333';
 
 export function PlaylistsScreen() {
   const router = useRouter();
@@ -50,7 +53,7 @@ export function PlaylistsScreen() {
   const [editTitle, setEditTitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [sidebarVisible, setSidebarVisible] = useState(false);
-  const styles = useMemo(() => createStyles(theme.ui), [theme]);
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const playlistsQuery = useQuery({
     queryFn: fetchUserPlaylists,
     queryKey: userPlaylistsQueryKey,
@@ -313,6 +316,7 @@ function PlaylistCard({
   const badgeStyle = playlist.visibility === 'public' ? styles.publicBadge : styles.privateBadge;
   const badgeLabelStyle = playlist.visibility === 'public' ? styles.publicBadgeLabel : styles.privateBadgeLabel;
   const trackCount = displayTrackCount ?? playlist.trackIds.length;
+  const voteIconColor = styles.voteIconColor.color;
 
   return (
     <Pressable
@@ -322,14 +326,14 @@ function PlaylistCard({
     >
       {playlist.kind === 'favorites' ? (
         <View style={styles.builtInCoverFallback}>
-          <HeartFilledIcon color="#CD4B4B" height={46} width={46} />
+          <HeartFilledIcon color="#EF4343" height={46} width={46} />
         </View>
       ) : playlist.kind === 'voted' ? (
         <View style={styles.builtInCoverFallback}>
-          <TriangleFilledIcon color="#6EA06E" height={48} width={48} />
+          <TriangleFilledIcon color={voteIconColor} height={48} width={48} />
         </View>
       ) : coverArtUrl ? (
-        <Image source={{ uri: coverArtUrl }} style={styles.coverImage} />
+        <Image source={{ uri: getCachedImageSrc(coverArtUrl) }} style={styles.coverImage} />
       ) : playlist.kind === 'user' ? (
         <View style={styles.mixCoverFallback}>
           <Text style={styles.mixCoverLabel}>Mix</Text>
@@ -395,7 +399,12 @@ function PlaylistMenuAction({
   );
 }
 
-function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
+function createStyles(theme: ReturnType<typeof useAppTheme>) {
+  const colors = theme.ui;
+  const isDark = theme.mode === 'dark';
+  const coverArtBorder = theme.mode === 'dark' ? '#1A1A19' : colors.borderStrong;
+  const darkBorder = isDark ? '#1A1A19' : colors.borderStrong;
+
   return StyleSheet.create({
     root: {
       backgroundColor: colors.appBackground,
@@ -470,8 +479,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
     },
     coverFallback: {
       alignItems: 'center',
-      backgroundColor: colors.surfaceGrouped,
-      borderColor: colors.borderStrong,
+      backgroundColor: isDark ? DARK_PLACEHOLDER_COVER_FILL : colors.surfaceGrouped,
+      borderColor: coverArtBorder,
       borderWidth: 2,
       height: 80,
       justifyContent: 'center',
@@ -479,8 +488,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
     },
     builtInCoverFallback: {
       alignItems: 'center',
-      backgroundColor: colors.surfaceGrouped,
-      borderColor: colors.borderStrong,
+      backgroundColor: isDark ? DARK_PLACEHOLDER_COVER_FILL : colors.surfaceGrouped,
+      borderColor: coverArtBorder,
       borderWidth: 2,
       height: 80,
       justifyContent: 'center',
@@ -488,8 +497,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
     },
     mixCoverFallback: {
       alignItems: 'center',
-      backgroundColor: colors.surfaceGrouped,
-      borderColor: colors.borderStrong,
+      backgroundColor: isDark ? DARK_PLACEHOLDER_COVER_FILL : colors.surfaceGrouped,
+      borderColor: coverArtBorder,
       borderWidth: 2,
       height: 80,
       justifyContent: 'center',
@@ -502,7 +511,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
       fontWeight: '900',
     },
     coverImage: {
-      borderColor: colors.borderStrong,
+      borderColor: coverArtBorder,
       borderWidth: 2,
       height: 80,
       width: 80,
@@ -570,7 +579,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
     },
     cardMenu: {
       backgroundColor: colors.surfaceCard,
-      borderColor: colors.borderStrong,
+      borderColor: darkBorder,
       borderWidth: 2,
       minWidth: 172,
       position: 'absolute',
@@ -584,7 +593,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
     },
     cardMenuAction: {
       alignItems: 'center',
-      borderBottomColor: colors.borderStrong,
+      borderBottomColor: darkBorder,
       borderBottomWidth: 1,
       flexDirection: 'row',
       gap: spacing.xs,
@@ -615,7 +624,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
     editButton: {
       alignItems: 'center',
       backgroundColor: colors.surfaceCard,
-      borderColor: colors.borderStrong,
+      borderColor: darkBorder,
       borderWidth: 2,
       justifyContent: 'center',
       minHeight: 42,
@@ -634,7 +643,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
     },
     editInput: {
       backgroundColor: colors.surfaceCard,
-      borderColor: colors.borderStrong,
+      borderColor: darkBorder,
       borderWidth: 2,
       color: colors.textPrimary,
       fontFamily: DS.font.family,
@@ -678,6 +687,9 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
     },
     iconColor: {
       color: colors.textPrimary,
+    },
+    voteIconColor: {
+      color: isDark ? DARK_VOTE_ICON_COLOR : colors.buttonVoteActive,
     },
   });
 }

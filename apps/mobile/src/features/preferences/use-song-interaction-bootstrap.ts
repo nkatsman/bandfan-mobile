@@ -33,8 +33,12 @@ export function useSongInteractionBootstrap() {
       return;
     }
 
-    const likedSongIds = savedSongIdsQuery.data ?? [];
-    const votedSongIds = votedSongIdsQuery.data ?? [];
+    if (!savedSongIdsQuery.isSuccess || !votedSongIdsQuery.isSuccess) {
+      return;
+    }
+
+    const likedSongIds = savedSongIdsQuery.data;
+    const votedSongIds = votedSongIdsQuery.data;
 
     syncSongInteractionIds({
       likedSongIds,
@@ -45,5 +49,5 @@ export function useSongInteractionBootstrap() {
       likedSongIds,
       votedSongIds,
     });
-  }, [savedSongIdsQuery.data, status, syncPlayerInteractionIds, syncSongInteractionIds, votedSongIdsQuery.data]);
+  }, [savedSongIdsQuery.data, savedSongIdsQuery.isSuccess, status, syncPlayerInteractionIds, syncSongInteractionIds, votedSongIdsQuery.data, votedSongIdsQuery.isSuccess]);
 }

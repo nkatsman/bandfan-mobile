@@ -21,8 +21,11 @@ import {
 } from '../features/preferences/player-settings-api';
 
 type RepeatMode = 'off' | 'all' | 'one';
-const DARK_GREY_BUTTON_FILL = '#3A3A38';
-const LIGHT_THEME_TEXT_COLOR = '#222220';
+const DARK_BUTTON_FILL = '#333333';
+const LIGHT_THEME_TEXT_COLOR = '#222222';
+const DARK_BUTTON_TEXT_COLOR = '#FFFFFF';
+const DARK_BUTTON_ICON_COLOR = '#6EA06E';
+const DARK_BORDER_COLOR = '#1A1A19';
 
 function getNextRepeatMode(current: RepeatMode): RepeatMode {
   if (current === 'off') {
@@ -39,7 +42,7 @@ function getNextRepeatMode(current: RepeatMode): RepeatMode {
 export function MusicPreferenceControls() {
   const theme = useAppTheme();
   const queryClient = useQueryClient();
-  const styles = useMemo(() => createStyles(theme.ui), [theme.ui]);
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const [activeHelp, setActiveHelp] = useState<{ label: string; text: string } | null>(null);
   const [repeatButtonReleased, setRepeatButtonReleased] = useState(false);
   const repeatBounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -124,7 +127,7 @@ export function MusicPreferenceControls() {
         label="Fix Volume"
         onHelp={setActiveHelp}
         onPress={() => savePlayerSettings((current) => ({ ...current, normalizationEnabled: !current.normalizationEnabled }))}
-        textColor={theme.ui.textPrimary}
+        mode={theme.mode}
         styles={styles}
       />
 
@@ -138,7 +141,7 @@ export function MusicPreferenceControls() {
         label={playerSettings.showAiAssistedDiscoverSongs ? 'All Songs' : 'Human Only'}
         onHelp={setActiveHelp}
         onPress={() => savePlayerSettings((current) => ({ ...current, showAiAssistedDiscoverSongs: !current.showAiAssistedDiscoverSongs }))}
-        textColor={theme.ui.textPrimary}
+        mode={theme.mode}
         styles={styles}
       />
 
@@ -152,7 +155,7 @@ export function MusicPreferenceControls() {
         label="Shuffle"
         onHelp={setActiveHelp}
         onPress={() => savePlayerSettings((current) => ({ ...current, shuffle: !current.shuffle }))}
-        textColor={theme.ui.textPrimary}
+        mode={theme.mode}
         styles={styles}
       />
 
@@ -172,7 +175,7 @@ export function MusicPreferenceControls() {
         label={repeatMode === 'one' ? 'Repeat One' : repeatMode === 'all' ? 'Repeat All' : "Don't Repeat"}
         onHelp={setActiveHelp}
         onPress={toggleRepeat}
-        textColor={theme.ui.textPrimary}
+        mode={theme.mode}
         styles={styles}
       />
 
@@ -194,24 +197,25 @@ function MusicModeButton({
   disabled = false,
   label,
   helpText,
+  mode,
   onHelp,
   onPress,
   renderIcon,
   styles,
-  textColor,
 }: {
   active: boolean;
   disabled?: boolean;
   helpText: string;
   label: string;
+  mode: ReturnType<typeof useAppTheme>['mode'];
   onHelp: (help: { label: string; text: string }) => void;
   onPress: () => void;
   renderIcon: (color: string) => ReactNode;
   styles: ReturnType<typeof createStyles>;
-  textColor: string;
 }) {
   const longPressTriggeredRef = useRef(false);
-  const contentColor = active ? LIGHT_THEME_TEXT_COLOR : textColor;
+  const contentColor = mode === 'dark' ? DARK_BUTTON_TEXT_COLOR : LIGHT_THEME_TEXT_COLOR;
+  const iconColor = mode === 'dark' ? DARK_BUTTON_ICON_COLOR : contentColor;
 
   return (
     <Pressable
@@ -230,10 +234,10 @@ function MusicModeButton({
 
         onPress();
       }}
-      style={({ pressed }) => [styles.musicControlButton, active && styles.musicControlButtonActive, disabled && styles.musicControlButtonDisabled, pressed && !disabled && styles.pressed]}
+      style={({ pressed }) => [styles.musicControlButton, mode === 'light' && !active && styles.musicControlButtonLight, active && styles.musicControlButtonActive, disabled && styles.musicControlButtonDisabled, pressed && !disabled && styles.pressed]}
     >
-      {renderIcon(contentColor)}
-      <Text style={[styles.musicControlLabel, active && styles.musicControlLabelActive]}>{label}</Text>
+      {renderIcon(iconColor)}
+      <Text style={[styles.musicControlLabel, { color: contentColor }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -247,30 +251,30 @@ function RepeatOffIcon({ color }: { color: string }) {
   );
 }
 
-function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
+function createStyles(theme: ReturnType<typeof useAppTheme>) {
+  const colors = theme.ui;
+
   return StyleSheet.create({
     musicControlButton: {
       alignItems: 'center',
-      backgroundColor: DARK_GREY_BUTTON_FILL,
-      borderColor: colors.borderStrong,
+      backgroundColor: DARK_BUTTON_FILL,
+      borderColor: theme.mode === 'dark' ? DARK_BORDER_COLOR : colors.borderStrong,
       borderWidth: 2,
       flexBasis: '48%',
       flexDirection: 'row',
       flexGrow: 1,
       gap: 6,
-      justifyContent: 'center',
+      justifyContent: 'flex-start',
       minHeight: 34,
       minWidth: 0,
       paddingHorizontal: spacing.sm,
-      shadowColor: '#000000',
-      shadowOffset: { width: 2, height: 2 },
-      shadowOpacity: 1,
-      shadowRadius: 0,
+      boxShadow: '2px 2px 0px #000000',
     },
     musicControlButtonActive: {
-      backgroundColor: colors.buttonPrimary,
-      shadowOpacity: 0,
-      transform: [{ translateX: 1 }, { translateY: 1 }],
+      backgroundColor: theme.mode === 'dark' ? DARK_BUTTON_FILL : colors.buttonPrimary,
+    },
+    musicControlButtonLight: {
+      backgroundColor: colors.surfaceCard,
     },
     musicControlButtonDisabled: {
       opacity: 0.55,
@@ -281,11 +285,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
       fontSize: typeScale.fine,
       fontWeight: '700',
     },
-    musicControlLabelActive: {
-      color: LIGHT_THEME_TEXT_COLOR,
-    },
     pressed: {
-      shadowOpacity: 0,
+      boxShadow: [],
       transform: [{ translateX: 1 }, { translateY: 1 }],
     },
     tooltipBackdrop: {

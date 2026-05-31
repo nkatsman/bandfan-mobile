@@ -21,6 +21,10 @@ function handlePlaybackStatus(status: AVPlaybackStatus) {
       : 0;
 
   usePlayerStore.setState({ isPlaying: status.isPlaying, progressPercent });
+
+  if (status.didJustFinish) {
+    advanceAfterTrackFinish();
+  }
 }
 
 async function ensureAudioMode() {
@@ -28,7 +32,51 @@ async function ensureAudioMode() {
     allowsRecordingIOS: false,
     playsInSilentModeIOS: true,
     shouldDuckAndroid: true,
-    staysActiveInBackground: false,
+    staysActiveInBackground: true,
+  });
+}
+
+function getNextQueueIndex(state: Pick<PlayerState, 'activeIndex' | 'isShuffleEnabled' | 'loopMode' | 'queue'>, automatic: boolean) {
+  if (state.queue.length === 0) {
+    return -1;
+  }
+
+  if (state.loopMode === 'track') {
+    return state.activeIndex;
+  }
+
+  if (state.isShuffleEnabled && state.queue.length > 1) {
+    return getRandomQueueIndex(state.queue.length, state.activeIndex);
+  }
+
+  if (state.activeIndex >= state.queue.length - 1) {
+    return state.loopMode === 'queue' ? 0 : automatic ? -1 : state.activeIndex;
+  }
+
+  return state.activeIndex + 1;
+}
+
+function advanceAfterTrackFinish() {
+  usePlayerStore.setState((state) => {
+    const nextIndex = getNextQueueIndex(state, true);
+
+    if (nextIndex < 0) {
+      return {
+        isPlaying: false,
+        progressPercent: 100,
+      };
+    }
+
+    const nextSong = state.queue[nextIndex] ?? null;
+    void playSong(nextSong);
+
+    return {
+      activeIndex: nextIndex,
+      activeSong: nextSong,
+      isMiniPlayerHidden: false,
+      isPlaying: Boolean(nextSong?.audioUrl),
+      progressPercent: 0,
+    };
   });
 }
 
@@ -56,6 +104,12 @@ async function playSong(song: Song | null) {
   }
 
   if (playbackSound && playbackSongId === song.id) {
+    const status = await playbackSound.getStatusAsync();
+
+    if (status.isLoaded && typeof status.durationMillis === 'number' && status.durationMillis - status.positionMillis < 250) {
+      await playbackSound.setPositionAsync(0);
+    }
+
     await playbackSound.playAsync();
     return;
   }
@@ -83,13 +137,11 @@ type PlayerState = {
   activeSong: Song | null;
   addToQueue: (song: Song) => void;
   closeFullPlayer: () => void;
-  closeSongSheet: () => void;
   isFullPlayerOpen: boolean;
   isMiniPlayerHidden: boolean;
   isNormalizationEnabled: boolean;
   isPlaying: boolean;
   isShuffleEnabled: boolean;
-  isSongSheetOpen: boolean;
   loopMode: 'off' | 'queue' | 'track';
   progressPercent: number;
   nextTrack: () => void;
@@ -97,7 +149,6 @@ type PlayerState = {
   playSelection: (queue: Song[], songId: string, sourceLabel: string) => void;
   previousTrack: () => void;
   queue: Song[];
-  openSongSheet: () => void;
   seekToPercent: (percent: number) => void;
   setMiniPlayerHidden: (isHidden: boolean) => void;
   stopPlayback: () => void;
@@ -122,13 +173,11 @@ export const usePlayerStore = create<PlayerState>((set) => ({
       return { queue: [...state.queue, song] };
     }),
   closeFullPlayer: () => set({ isFullPlayerOpen: false }),
-  closeSongSheet: () => set({ isSongSheetOpen: false }),
   isFullPlayerOpen: false,
   isMiniPlayerHidden: false,
   isNormalizationEnabled: false,
   isPlaying: false,
   isShuffleEnabled: false,
-  isSongSheetOpen: false,
   loopMode: 'off',
   progressPercent: 0,
   nextTrack: () =>
@@ -137,13 +186,7 @@ export const usePlayerStore = create<PlayerState>((set) => ({
         return state;
       }
 
-      const nextIndex = state.loopMode === 'track'
-        ? state.activeIndex
-        : state.isShuffleEnabled && state.queue.length > 1
-          ? getRandomQueueIndex(state.queue.length, state.activeIndex)
-          : state.activeIndex >= state.queue.length - 1 && state.loopMode === 'off'
-            ? state.activeIndex
-            : (state.activeIndex + 1) % state.queue.length;
+      const nextIndex = getNextQueueIndex(state, false);
       const nextSong = state.queue[nextIndex] ?? null;
       void playSong(nextSong);
 
@@ -195,7 +238,6 @@ export const usePlayerStore = create<PlayerState>((set) => ({
       };
     }),
   queue: [],
-  openSongSheet: () => set({ isSongSheetOpen: true }),
   seekToPercent: (percent) => {
     const clamped = Math.max(0, Math.min(100, percent));
 
@@ -223,7 +265,7 @@ export const usePlayerStore = create<PlayerState>((set) => ({
   setMiniPlayerHidden: (isHidden) => set({ isMiniPlayerHidden: isHidden }),
   stopPlayback: () => {
     void unloadPlaybackSound();
-    set({ activeIndex: -1, activeSong: null, isFullPlayerOpen: false, isMiniPlayerHidden: false, isPlaying: false, isSongSheetOpen: false, progressPercent: 0, queue: [] });
+    set({ activeIndex: -1, activeSong: null, isFullPlayerOpen: false, isMiniPlayerHidden: false, isPlaying: false, progressPercent: 0, queue: [] });
   },
   syncSongInteractionIds: ({ likedSongIds, votedSongIds }) =>
     set((state) => {

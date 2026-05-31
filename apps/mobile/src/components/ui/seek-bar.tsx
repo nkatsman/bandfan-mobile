@@ -12,7 +12,7 @@ type SeekBarProps = {
 };
 
 const LIGHT_PLAY_CONTROL_FILL = '#FFFFFF';
-const LIGHT_PLAY_CONTROL_STROKE = '#222220';
+const LIGHT_PLAY_CONTROL_STROKE = '#222222';
 
 export function SeekBar({ interactive = true, onSeek, onSeekChange, value = 0 }: SeekBarProps) {
   const theme = useAppTheme();
@@ -128,7 +128,6 @@ export function SeekBar({ interactive = true, onSeek, onSeekChange, value = 0 }:
               styles.thumb,
               {
                 backgroundColor: LIGHT_PLAY_CONTROL_FILL,
-                borderColor: LIGHT_PLAY_CONTROL_STROKE,
                 borderRadius: thumbRadius,
                 height: thumbSize,
                 left: thumbLeft,
@@ -178,7 +177,9 @@ const styles = StyleSheet.create({
     top: '50%',
   },
   thumb: {
-    borderWidth: 2,
+    borderWidth: 0,
+    boxShadow: `inset 0 0 0 2px ${LIGHT_PLAY_CONTROL_STROKE}`,
+    overflow: 'hidden',
     position: 'absolute',
   },
   thumbShadow: {

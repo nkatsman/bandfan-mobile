@@ -1,13 +1,15 @@
 import { router, useRootNavigationState } from 'expo-router';
 import type { User } from 'firebase/auth';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as ExpoLinking from 'expo-linking';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import GoogleLogo from '../assets/Icons/logo-google.svg';
 import LogoDark from '../assets/BandFan/BandFan - Logo Dark.svg';
 import LogoLight from '../assets/BandFan/BandFan - Logo Light.svg';
+import ContrastIcon from '../assets/Icons/contrast-2-fill.svg';
+import SunIcon from '../assets/Icons/sun-line.svg';
 import { DsCard } from '../src/components/ui/ds-card';
 import { DsInput } from '../src/components/ui/ds-input';
 import { DsTabs } from '../src/components/ui/ds-tabs';
@@ -34,11 +36,14 @@ export default function SignInScreen() {
   const status = useSessionStore((state) => state.status);
   const error = useSessionStore((state) => state.error);
   const styles = useMemo(() => createStyles(screenWidth, screenHeight, isDark), [screenWidth, screenHeight, isDark]);
+  const backgroundPatternItems = useMemo(() => buildSignInPatternItems(screenWidth, screenHeight, isDark), [screenHeight, screenWidth, isDark]);
+  const logoPressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toggleMode = useThemeStore((state) => state.toggleMode);
   const BrandLogo = isDark ? LogoDark : LogoLight;
+  const ThemeIcon = isDark ? SunIcon : ContrastIcon;
 
   // Logo SVG dimensions scaled from 440-px reference canvas
-  const logoW = Math.round(scaleW(281.47, screenWidth));
+  const logoW = Math.round(scaleW(272.47, screenWidth));
   const logoH = Math.round(scaleW(51.68,  screenWidth));
   const formCardHeight = Math.round(Math.max(500, Math.min(scaleH(560, screenHeight), 620)));
 
@@ -67,6 +72,7 @@ export default function SignInScreen() {
   const [pendingGoogleUser, setPendingGoogleUser] = useState<User | null>(null);
   const [hasAcceptedLegal, setHasAcceptedLegal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [logoPressed, setLogoPressed] = useState(false);
   const [processingDotCount, setProcessingDotCount] = useState(1);
   const [localError, setLocalError] = useState<string | null>(null);
   const [showGoogleInviteOnlyDialog, setShowGoogleInviteOnlyDialog] = useState(false);
@@ -114,6 +120,32 @@ export default function SignInScreen() {
     setPendingGoogleUser(null);
     setHasAcceptedLegal(false);
   }, [authMode]);
+
+  useEffect(() => () => {
+    if (logoPressTimeoutRef.current) {
+      clearTimeout(logoPressTimeoutRef.current);
+    }
+  }, []);
+
+  const onLogoPressIn = () => {
+    if (logoPressTimeoutRef.current) {
+      clearTimeout(logoPressTimeoutRef.current);
+      logoPressTimeoutRef.current = null;
+    }
+
+    setLogoPressed(true);
+  };
+
+  const onLogoPressOut = () => {
+    logoPressTimeoutRef.current = setTimeout(() => {
+      setLogoPressed(false);
+      logoPressTimeoutRef.current = null;
+    }, 160);
+  };
+
+  const onLogoPress = () => {
+    toggleMode();
+  };
 
   const legalBaseUrl = useMemo(() => {
     if (!hasApiBaseUrl) {
@@ -291,7 +323,10 @@ export default function SignInScreen() {
 
   return (
     <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+      <View pointerEvents="none" style={styles.backgroundPattern}>
+        {backgroundPatternItems.map((itemStyle, index) => <View key={index} style={itemStyle} />)}
+      </View>
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} style={styles.scrollArea}>
         {/* ── Logo card ─────────────────────────────────────────────────
             Reference proportions (440-px canvas):
               Card face  : 334.73 × 113.7 px, thick border (7 px)
@@ -301,16 +336,22 @@ export default function SignInScreen() {
         ──────────────────────────────────────────────────────────────── */}
         <DsCard
           fixedHeight={Math.round(scaleW(113.7, screenWidth))}
-          shadowSize="thick"
-          style={styles.logoCardShell}
+          reserveShadowSize="thick"
+          shadowSize={logoPressed ? 'thin' : 'thick'}
+          style={[styles.logoCardShell, logoPressed && styles.logoCardPressed]}
           width={Math.round(scaleW(334.73, screenWidth))}
         >
           <Pressable
             accessibilityRole="button"
-            onPress={toggleMode}
-            style={({ pressed }) => [styles.logoTapArea, pressed && styles.buttonPressed]}
+            onPress={onLogoPress}
+            onPressIn={onLogoPressIn}
+            onPressOut={onLogoPressOut}
+            style={styles.logoTapArea}
           >
             <BrandLogo height={logoH} style={styles.logoGraphic} width={logoW} />
+            <View style={styles.themeIconSlot}>
+              <ThemeIcon color={isDark ? '#FFFFFF' : DS.color.ink} height={15} width={15} />
+            </View>
           </Pressable>
         </DsCard>
 
@@ -379,13 +420,14 @@ export default function SignInScreen() {
 
               {authMode === 'sign-up' && registrationStatus.registrationMode === 'invite_only' ? (
                 <View style={styles.inviteWrap}>
-                  <Text style={styles.inviteCopy}>Registration is invite-only right now.</Text>
-                  <TextInput
+                  <DsInput
                     autoCapitalize="characters"
+                    autoCorrect={false}
+                    label="INVITE CODE"
                     onChangeText={(value) => setInviteCode(value.toUpperCase())}
-                    placeholder="Invite code"
+                    placeholder="####-####"
                     placeholderTextColor={placeholderColor}
-                    style={styles.input}
+                    stackGap={0}
                     value={inviteCode}
                   />
                 </View>
@@ -408,6 +450,7 @@ export default function SignInScreen() {
             </View>
 
             <View style={styles.formBottom}>
+              {(localError ?? error) ? <Text style={styles.errorText}>{localError ?? error}</Text> : null}
               <View style={styles.ctaRow}>
                 <Pressable
                   accessibilityLabel="Sign in with Google"
@@ -448,7 +491,6 @@ export default function SignInScreen() {
                 <Text style={styles.helperText}>Firebase client config is missing for real sign-in on this build.</Text>
               ) : null}
               {infoMessage ? <Text style={styles.infoText}>{infoMessage}</Text> : null}
-              {(localError ?? error) ? <Text style={styles.errorText}>{localError ?? error}</Text> : null}
             </View>
           </View>
         </DsCard>
@@ -459,7 +501,7 @@ export default function SignInScreen() {
           <Pressable onPress={() => setShowGoogleInviteOnlyDialog(false)} style={styles.modalBackdrop} />
           <View style={styles.modalPanel}>
             <Text style={styles.modalTitle}>Google sign-in unavailable</Text>
-            <Text style={styles.modalCopy}>Registration is invite-only right now. Sign in with email and password, then connect Google from account settings once registration opens.</Text>
+            <Text style={styles.modalCopy}>Create the account with email and password first, then connect Google from account settings.</Text>
             <View style={styles.modalActions}>
               <Pressable accessibilityRole="button" onPress={() => setShowGoogleInviteOnlyDialog(false)} style={({ pressed }) => [styles.modalPrimaryButton, pressed && styles.buttonPressed]}>
                 <Text style={styles.modalPrimaryButtonText}>OK</Text>
@@ -547,6 +589,15 @@ function createStyles(screenWidth: number, screenHeight: number, isDark: boolean
       backgroundColor: isDark ? '#1A1A19' : DS.color.background,
       flex: 1,
     },
+    backgroundPattern: {
+      ...StyleSheet.absoluteFillObject,
+      opacity: 1,
+      zIndex: 0,
+    },
+    scrollArea: {
+      position: 'relative',
+      zIndex: 1,
+    },
     scrollContent: {
       alignItems: 'center',
       flexGrow: 1,
@@ -559,6 +610,9 @@ function createStyles(screenWidth: number, screenHeight: number, isDark: boolean
       marginBottom: logoToFormGap,
       transform: [{ translateY: cardShift }],
     },
+    logoCardPressed: {
+      transform: [{ translateX: 8 }, { translateY: cardShift + 8 }],
+    },
     formCardShell: {
       marginBottom: 20,
       transform: [{ translateY: -cardShift }],
@@ -569,11 +623,22 @@ function createStyles(screenWidth: number, screenHeight: number, isDark: boolean
       alignItems: 'center',
       flex: 1,
       justifyContent: 'center',
+      position: 'relative',
     },
     logoGraphic: {
       // Visual-balance nudge applied here on top of the centred position
       marginLeft: -3,
       marginTop: 2,
+    },
+    themeIconSlot: {
+      alignItems: 'center',
+      backgroundColor: 'transparent',
+      height: 34,
+      justifyContent: 'center',
+      position: 'absolute',
+      right: 0,
+      top: 12,
+      width: 38,
     },
 
     // Form content wrapper
@@ -604,7 +669,6 @@ function createStyles(screenWidth: number, screenHeight: number, isDark: boolean
 
     // Invite-only extra field
     inviteWrap: {
-      gap: 8,
       marginBottom: 20,
     },
     inviteCopy: {
@@ -613,27 +677,13 @@ function createStyles(screenWidth: number, screenHeight: number, isDark: boolean
       fontSize: DS.font.size.body,
       fontWeight: '500',
     },
-    input: {
-      backgroundColor: isDark ? '#222220' : DS.color.background,
-      borderColor: DS.stroke.color,
-      borderRadius: 0,
-      borderWidth: DS.stroke.fine,
-      color: isDark ? DS.color.accent : DS.color.ink,
-      fontFamily: DS.font.family,
-      fontSize: DS.font.size.body,
-      fontWeight: DS.font.weight.bold,
-      minHeight: 56,
-      paddingHorizontal: 14,
-      paddingVertical: 10,
-    },
-
     // Forgot-password ghost button
     ghostButton: {
       alignSelf: 'flex-start',
       marginBottom: 20,
     },
     ghostButtonText: {
-      color: isDark ? '#86ABD6' : '#8F8F8F',
+      color: isDark ? '#86ABD6' : '#4C79AE',
       fontFamily: DS.font.family,
       fontSize: DS.font.size.body,
       fontWeight: DS.font.weight.regular,
@@ -853,4 +903,34 @@ function createStyles(screenWidth: number, screenHeight: number, isDark: boolean
       fontWeight: '900',
     },
   });
+}
+
+function buildSignInPatternItems(screenWidth: number, screenHeight: number, isDark: boolean): ViewStyle[] {
+  if (isDark) {
+    const gap = 20;
+    const columns = Math.ceil(screenWidth / gap) + 1;
+    const rows = Math.ceil(screenHeight / gap) + 1;
+
+    return Array.from({ length: columns * rows }, (_, index) => ({
+      backgroundColor: 'rgba(255, 249, 239, 0.12)',
+      borderRadius: 1,
+      height: 2,
+      left: (index % columns) * gap + 1,
+      position: 'absolute',
+      top: Math.floor(index / columns) * gap + 1,
+      width: 2,
+    }));
+  }
+
+  const stripeCycle = 4;
+  const rows = Math.ceil(screenHeight / stripeCycle) + 1;
+
+  return Array.from({ length: rows }, (_, index) => ({
+    backgroundColor: 'rgba(34, 34, 32, 0.02)',
+    height: 2,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: index * stripeCycle,
+  }));
 }

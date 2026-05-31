@@ -13,7 +13,7 @@ type SurfaceCardProps = PropsWithChildren<{
 
 export function SurfaceCard({ children, style, tone = 'card' }: SurfaceCardProps) {
   const theme = useAppTheme();
-  const styles = useMemo(() => createStyles(theme.ui), [theme]);
+  const styles = useMemo(() => createStyles(theme.ui, theme.mode, tone), [theme, tone]);
   const backgrounds: Record<SurfaceTone, string> = {
     accent: theme.ui.surfaceAccent,
     card: theme.ui.surfaceCard,
@@ -29,7 +29,7 @@ export function SurfaceCard({ children, style, tone = 'card' }: SurfaceCardProps
   );
 }
 
-function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
+function createStyles(colors: ReturnType<typeof useAppTheme>['ui'], mode: ReturnType<typeof useAppTheme>['mode'], tone: SurfaceTone) {
   return StyleSheet.create({
     shadow: {
       backgroundColor: '#000000',
@@ -41,7 +41,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
       top: 6,
     },
     card: {
-      borderColor: colors.borderStrong,
+      borderColor: mode === 'dark' && tone === 'player' ? '#1A1A19' : colors.borderStrong,
       borderRadius: radii.md,
       borderWidth: 3,
       padding: spacing.lg,

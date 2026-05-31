@@ -22,6 +22,8 @@ import { useMusicStore } from '../../state/music-store';
 import { usePlayerStore } from '../../state/player-store';
 import { discoverySongsQueryDefaults, discoverySongsQueryKey, fetchDiscoverySongsForPreferences } from './discovery-api';
 
+const SEARCH_FILTER_SORT_Z_INDEX = 4000;
+
 export function DiscoveryScreen() {
   const theme = useAppTheme();
   const songs = useMusicStore((state) => state.songs);
@@ -141,7 +143,6 @@ export function DiscoveryScreen() {
             onPlaySong={(song) => {
               playSelection(viewSongs, song.id, song.sourceLabel);
             }}
-            onSongRowPress={() => usePlayerStore.getState().openSongSheet()}
             onToggleLikeSong={toggleSongLike}
             onToggleVoteSong={toggleSongReleaseSupport}
             songs={isDiscoverLoading ? [] : viewSongs}
@@ -181,6 +182,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
     },
     bottomControlsDock: {
       backgroundColor: colors.appBackground,
+      position: 'relative',
+      zIndex: SEARCH_FILTER_SORT_Z_INDEX,
     },
     sectionTitle: {
       color: colors.textPrimary,

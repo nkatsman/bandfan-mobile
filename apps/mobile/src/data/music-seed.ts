@@ -3,7 +3,7 @@ import { Playlist, Song } from '../types/music';
 export const seedSongs: Song[] = [
   {
     artist: 'Glass Harbor',
-    artworkColor: '#E4C87E',
+    artworkColor: '#E7BF7B',
     durationLabel: '3:24',
     id: 'song-glass-harbor-satellite',
     liked: true,
@@ -13,7 +13,7 @@ export const seedSongs: Song[] = [
   },
   {
     artist: 'North Parade',
-    artworkColor: '#ED9E97',
+    artworkColor: '#E3A0A0',
     durationLabel: '2:58',
     id: 'song-north-parade-afterglow',
     liked: false,
@@ -33,7 +33,7 @@ export const seedSongs: Song[] = [
   },
   {
     artist: 'Pine Static',
-    artworkColor: '#86ABD6',
+    artworkColor: '#8FACCE',
     durationLabel: '3:41',
     id: 'song-pine-static-loud-enough',
     liked: false,

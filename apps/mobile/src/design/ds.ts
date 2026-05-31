@@ -58,21 +58,21 @@ export const DS = {
     /** Card face, progress-bar thumb, play button fill, song-table row, ENTER button label */
     cardSurface:  '#FFFFFF',
     /** Progress bar unfilled (non-progressed) area */
-    progressBase: '#FCF9F0',
+    progressBase: '#F5E6D3',
 
     // --- Borders & shadows (fully opaque, no transparency) ---
     /** All card borders, cover-art border, stroke colour everywhere */
-    border:  '#222220',
+    border:  '#222222',
     /** All block shadows — always fully opaque */
     shadow:  '#000000',
 
     // --- Accents ---
     /** Progress bar filled area, input placeholder text */
-    progressFill: '#E4C87E',
+    progressFill: '#E7BF7B',
     /** ENTER button fill, like-button (active state) */
     enterFill:    '#EF4343',
     /** Band name, vote-active state, bottom-menu border / icons / labels */
-    accent:       '#608160',
+    accent:       '#6EA06E',
 
     // --- Ink ---
     /** Song name in player, like/vote inactive, progress-bar border+shadow, primary text */
@@ -93,10 +93,10 @@ export const DS = {
 
   /**
    * Stroke (outline/border) system.
-   * Always colour `DS.color.border` (#222220), fully opaque, square corners (radius: 0).
+  * Always colour `DS.color.border` (#222222), fully opaque, square corners (radius: 0).
    */
   stroke: {
-    color: '#222220' as const,
+    color: '#222222' as const,
     fine:  2 as const,   // e.g. input fields
     thin:  4 as const,   // e.g. ENTER button border
     thick: 7 as const,   // e.g. logo card, form card

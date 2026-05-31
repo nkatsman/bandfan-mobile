@@ -4,21 +4,31 @@ import { ThemeMode, useThemeStore } from '../state/theme-store';
 
 const REF_COLORS = {
   black: '#000000',
-  blue: '#86ABD6',
+  blue: '#8FACCE',
+  blueDark: '#4C79AE',
+  blueSoft: '#D1DDEB',
   charcoal: '#333333',
   cream: '#FFF9EF',
   darkShell: '#1A1A19',
-  demoBlue: '#6673D1',
   fog: '#F4F4F4',
   green: '#6EA06E',
+  greenDark: '#577557',
+  greenMid: '#A2BAA2',
+  greenSoft: '#C7D6C7',
   grey: '#8F8F8F',
-  ink: '#222220',
-  ocher: '#E4C87E',
-  orange: '#F1B15E',
-  paleControl: '#E7E6E4',
+  ink: '#222222',
+  neutral: '#CCCCCC',
+  ocher: '#E7BF7B',
+  ocherDark: '#DFAC53',
+  ocherMid: '#F0D8AE',
+  ocherSoft: '#EDD2B0',
+  purple: '#8373B3',
   red: '#EF4343',
+  redDark: '#8C3333',
+  rose: '#E3A0A0',
+  sandSoft: '#F5E6D3',
   slate: '#4A4A44',
-  warmWhite: '#FCF9F0',
+  steel: '#474747',
   white: '#FFFFFF',
 } as const;
 
@@ -27,15 +37,23 @@ const ORIGINAL_OCHER = REF_COLORS.ocher;
 type Palette = {
   black: string;
   blue: string;
+  blueDark: string;
+  blueSoft: string;
   bone: string;
+  charcoal: string;
   fog: string;
   gold: string;
+  goldDark: string;
+  goldMid: string;
   goldSoft: string;
   green: string;
   greenHover: string;
+  greenMid: string;
   greenSoft: string;
   indigo: string;
+  neutral: string;
   red: string;
+  redDark: string;
   rose: string;
   sand: string;
   stone: string;
@@ -194,34 +212,50 @@ export const paletteThemes: Record<ThemeMode, Palette> = {
   dark: {
     black: REF_COLORS.darkShell,
     blue: REF_COLORS.blue,
+    blueDark: REF_COLORS.blueDark,
+    blueSoft: REF_COLORS.blueSoft,
     bone: REF_COLORS.ink,
-    fog: '#474747',
+    charcoal: REF_COLORS.charcoal,
+    fog: REF_COLORS.steel,
     gold: REF_COLORS.ocher,
-    goldSoft: REF_COLORS.charcoal,
+    goldDark: REF_COLORS.ocherDark,
+    goldMid: REF_COLORS.ocherMid,
+    goldSoft: REF_COLORS.ocherSoft,
     green: REF_COLORS.green,
-    greenHover: REF_COLORS.green,
-    greenSoft: REF_COLORS.green,
-    indigo: REF_COLORS.demoBlue,
+    greenHover: REF_COLORS.greenDark,
+    greenMid: REF_COLORS.greenMid,
+    greenSoft: REF_COLORS.greenSoft,
+    indigo: REF_COLORS.purple,
+    neutral: REF_COLORS.neutral,
     red: REF_COLORS.red,
-    rose: REF_COLORS.red,
-    sand: REF_COLORS.charcoal,
+    redDark: REF_COLORS.redDark,
+    rose: REF_COLORS.rose,
+    sand: REF_COLORS.slate,
     stone: REF_COLORS.grey,
-    white: REF_COLORS.fog,
+    white: REF_COLORS.white,
   },
   light: {
     black: REF_COLORS.ink,
     blue: REF_COLORS.blue,
+    blueDark: REF_COLORS.blueDark,
+    blueSoft: REF_COLORS.blueSoft,
     bone: REF_COLORS.cream,
+    charcoal: REF_COLORS.charcoal,
     fog: REF_COLORS.fog,
     gold: REF_COLORS.ocher,
-    goldSoft: REF_COLORS.warmWhite,
+    goldDark: REF_COLORS.ocherDark,
+    goldMid: REF_COLORS.ocherMid,
+    goldSoft: REF_COLORS.sandSoft,
     green: REF_COLORS.green,
-    greenHover: REF_COLORS.green,
-    greenSoft: REF_COLORS.green,
-    indigo: REF_COLORS.demoBlue,
+    greenHover: REF_COLORS.greenDark,
+    greenMid: REF_COLORS.greenMid,
+    greenSoft: REF_COLORS.greenSoft,
+    indigo: REF_COLORS.purple,
+    neutral: REF_COLORS.neutral,
     red: REF_COLORS.red,
-    rose: REF_COLORS.red,
-    sand: REF_COLORS.cream,
+    redDark: REF_COLORS.redDark,
+    rose: REF_COLORS.rose,
+    sand: REF_COLORS.ocherSoft,
     stone: REF_COLORS.grey,
     white: REF_COLORS.white,
   },
@@ -252,16 +286,16 @@ function createThemeSemantics(mode: ThemeMode, palette: Palette): ThemeSemantics
         },
       },
       colors: {
-        buttonFill: palette.gold,
+        buttonFill: palette.fog,
         destroyButtonFill: palette.red,
         destroyButtonText: palette.white,
         dividerLineHorizontal: palette.fog,
         dividerLineVertical: palette.fog,
         ghostButton: palette.blue,
         iconFill: palette.white,
-        inputFieldFill: palette.black,
+        inputFieldFill: palette.fog,
         inputFieldTextHint: palette.stone,
-        likeToggle: palette.rose,
+        likeToggle: palette.red,
         menuBarButtonFillActive: palette.sand,
         menuBarButtonFillInactive: palette.black,
         menuBarIconActive: palette.green,
@@ -274,11 +308,11 @@ function createThemeSemantics(mode: ThemeMode, palette: Palette): ThemeSemantics
           mastered: palette.blue,
           mixed: palette.indigo,
           recorded: palette.greenSoft,
-          released: palette.rose,
+          released: palette.red,
           sentToStores: palette.green,
         },
         tableHeader: palette.sand,
-        tableRowFill: palette.bone,
+        tableRowFill: palette.charcoal,
         voteToggle: palette.green,
       },
       images: {
@@ -306,7 +340,7 @@ function createThemeSemantics(mode: ThemeMode, palette: Palette): ThemeSemantics
         opacity: {
           dark: 1,
           light: 0.2,
-          neutral: 0.5,
+          neutral: 0.4,
         },
         size: {
           dark: 8,
@@ -331,9 +365,9 @@ function createThemeSemantics(mode: ThemeMode, palette: Palette): ThemeSemantics
           neutral: palette.bone,
         },
         shadow: {
-          dark: '#000000',
-          light: palette.fog,
-          neutral: palette.black,
+          dark: REF_COLORS.ink,
+          light: REF_COLORS.fog,
+          neutral: REF_COLORS.ink,
         },
         text: {
           dark: palette.white,
@@ -362,7 +396,7 @@ function createThemeSemantics(mode: ThemeMode, palette: Palette): ThemeSemantics
       iconFill: palette.black,
       inputFieldFill: palette.bone,
       inputFieldTextHint: palette.stone,
-      likeToggle: palette.rose,
+      likeToggle: palette.red,
       menuBarButtonFillActive: palette.gold,
       menuBarButtonFillInactive: palette.bone,
       menuBarIconActive: palette.black,
@@ -375,7 +409,7 @@ function createThemeSemantics(mode: ThemeMode, palette: Palette): ThemeSemantics
         mastered: palette.blue,
         mixed: palette.indigo,
         recorded: palette.greenSoft,
-        released: palette.rose,
+        released: palette.red,
         sentToStores: palette.green,
       },
       tableHeader: palette.sand,
@@ -465,7 +499,7 @@ function createComponentAliases(semantic: ThemeSemantics): ComponentColorAliases
     surfaceAccent: semantic.tones.cardFill.dark,
     surfaceCard: semantic.tones.cardFill.light,
     surfaceGrouped: semantic.tones.cardFill.neutral,
-    surfacePlayer: '#A2BAA2',
+    surfacePlayer: REF_COLORS.greenMid,
     surfaceTab: semantic.colors.menuBarButtonFillInactive,
     surfaceTabActive: semantic.colors.menuBarButtonFillActive,
     tagBackground: semantic.colors.tableHeader,
@@ -505,7 +539,19 @@ const appThemes: Record<ThemeMode, AppTheme> = {
     palette: paletteThemes.dark,
     semantic: darkSemantic,
     statusBarStyle: 'light',
-    ui: createComponentAliases(darkSemantic),
+    ui: {
+      ...createComponentAliases(darkSemantic),
+      appBackground: paletteThemes.dark.bone,
+      buttonMuted: paletteThemes.dark.charcoal,
+      buttonPrimary: paletteThemes.dark.charcoal,
+      buttonSecondary: paletteThemes.dark.charcoal,
+      chromeBackground: paletteThemes.dark.bone,
+      sidebarBackground: paletteThemes.dark.fog,
+      surfaceAccent: paletteThemes.dark.fog,
+      surfaceCard: paletteThemes.dark.fog,
+      surfaceGrouped: paletteThemes.dark.fog,
+      surfacePlayer: paletteThemes.dark.greenHover,
+    },
     uiSpacing: createSpacingAliases(darkSemantic),
   },
   light: {

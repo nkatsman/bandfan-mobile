@@ -5,7 +5,7 @@ type MoreVerticalIconProps = {
   size?: number;
 };
 
-export function MoreVerticalIcon({ color = '#222220', size = 16 }: MoreVerticalIconProps) {
+export function MoreVerticalIcon({ color = '#222222', size = 16 }: MoreVerticalIconProps) {
   const dotSize = Math.max(3, Math.round(size * 0.22));
 
   return (

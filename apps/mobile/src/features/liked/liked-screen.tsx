@@ -21,6 +21,8 @@ import { useMusicStore } from '../../state/music-store';
 import { usePlayerStore } from '../../state/player-store';
 import { discoverySongsQueryDefaults, discoverySongsQueryKey, fetchDiscoverySongs } from '../discovery/discovery-api';
 
+const SEARCH_FILTER_SORT_Z_INDEX = 4000;
+
 export function LikedScreen() {
   const theme = useAppTheme();
   const songs = useMusicStore((state) => state.songs);
@@ -103,6 +105,7 @@ export function LikedScreen() {
 
         {isFavoritesLoading ? (
           <SongTable
+            hideLikeColumn
             isLoading
             loadingDotCount={loadingDotCount}
             likePendingForSong={isSongLikePending}
@@ -110,7 +113,6 @@ export function LikedScreen() {
             onPlaySong={(song) => {
               playSelection(viewSongs, song.id, song.sourceLabel);
             }}
-            onSongRowPress={() => usePlayerStore.getState().openSongSheet()}
             onToggleLikeSong={toggleSongLike}
             onToggleVoteSong={toggleSongReleaseSupport}
             songs={[]}
@@ -122,12 +124,12 @@ export function LikedScreen() {
           <Text style={styles.emptyTitle}>No favorites match.</Text>
         ) : (
           <SongTable
+            hideLikeColumn
             likePendingForSong={isSongLikePending}
             menuContext="favorites"
             onPlaySong={(song) => {
               playSelection(viewSongs, song.id, song.sourceLabel);
             }}
-            onSongRowPress={() => usePlayerStore.getState().openSongSheet()}
             onToggleLikeSong={toggleSongLike}
             onToggleVoteSong={toggleSongReleaseSupport}
             songs={viewSongs}
@@ -163,6 +165,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
     },
     bottomControlsDock: {
       backgroundColor: colors.appBackground,
+      position: 'relative',
+      zIndex: SEARCH_FILTER_SORT_Z_INDEX,
     },
     content: {
       paddingBottom: spacing.sm,

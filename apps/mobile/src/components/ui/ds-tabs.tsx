@@ -42,7 +42,7 @@ export function DsTabs({ onChange, options, style, value }: DsTabsProps) {
               index > 0 && styles.collideLeft,
               isDark && styles.tabDark,
               {
-                backgroundColor: active ? DS.color.border : (isDark ? '#222220' : DS.color.background),
+                backgroundColor: active ? (isDark ? '#333333' : DS.color.border) : (isDark ? '#474747' : DS.color.background),
               },
               pressed && styles.pressed,
               option.disabled && styles.disabled,
@@ -52,7 +52,7 @@ export function DsTabs({ onChange, options, style, value }: DsTabsProps) {
               style={[
                 styles.label,
                 {
-                  color: active ? (isDark ? '#6EA06E' : DS.color.cardSurface) : (isDark ? '#8F8F8F' : '#4A4A44'),
+                  color: active ? (isDark ? '#FFFFFF' : DS.color.cardSurface) : (isDark ? '#D8D8D8' : '#4A4A44'),
                 },
               ]}
             >
@@ -81,7 +81,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   tabDark: {
-    borderColor: '#474747',
+    borderColor: '#1A1A19',
   },
   // Collapse adjacent borders into one seam.
   collideLeft: {

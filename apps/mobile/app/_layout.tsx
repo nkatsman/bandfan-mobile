@@ -5,9 +5,10 @@ import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
 import { useEffect } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppContentProtection } from '../src/components/core/app-content-protection';
-import { ThumbZoneDebugOverlayStatic } from '../src/components/thumb-zone-debug-overlay';
+import { ThemeColorDebugOverlayStatic, ThumbZoneDebugOverlayStatic } from '../src/components/thumb-zone-debug-overlay';
 import { DEBUG_THUMB_ZONES_HAND, DEBUG_THUMB_ZONES_OPACITY } from '../src/config/debug-mode';
 import { useAppTheme } from '../src/design/theme';
 import { useBootstrapAuth } from '../src/features/auth/use-bootstrap-auth';
@@ -24,7 +25,9 @@ export default function RootLayout() {
   const router = useRouter();
   const theme = useAppTheme();
   const debugModeEnabled = useDebugStore((state) => state.debugModeEnabled);
+  const colorOverlayMode = useDebugStore((state) => state.colorOverlayMode);
   const thumbOverlayVisible = useDebugStore((state) => state.thumbOverlayVisible);
+  const toggleColorOverlay = useDebugStore((state) => state.toggleColorOverlay);
   const toggleThumbOverlay = useDebugStore((state) => state.toggleThumbOverlay);
 
   useEffect(() => {
@@ -74,8 +77,9 @@ export default function RootLayout() {
         <Stack.Screen name="playlist/[playlistId]" />
       </Stack>
       {debugModeEnabled && thumbOverlayVisible ? <ThumbZoneDebugOverlayStatic hand={DEBUG_THUMB_ZONES_HAND} opacity={DEBUG_THUMB_ZONES_OPACITY} /> : null}
+      {debugModeEnabled && colorOverlayMode !== 'off' ? <ThemeColorDebugOverlayStatic side={colorOverlayMode} /> : null}
       {__DEV__ && debugModeEnabled ? (
-        <View style={styles.debugButtonLayer}>
+        <SafeAreaView edges={[ 'top' ]} style={styles.debugButtonLayer}>
           <View style={styles.debugButtonRow}>
             <Pressable
               accessibilityLabel="Go back"
@@ -83,16 +87,26 @@ export default function RootLayout() {
               onPress={() => router.back()}
               style={({ pressed }) => [styles.debugButton, pressed && styles.debugButtonPressed]}
             >
-              <Text style={styles.debugButtonLabel}>Back</Text>
+              <Text style={styles.debugButtonLabel}>BACK</Text>
             </Pressable>
             <Pressable
+              accessibilityLabel="Toggle color overlay"
+              accessibilityRole="button"
+              onPress={toggleColorOverlay}
+              style={({ pressed }) => [styles.debugButton, pressed && styles.debugButtonPressed]}
+            >
+              <Text style={styles.debugButtonLabel}>CLRS</Text>
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Toggle thumb overlay"
+              accessibilityRole="button"
               onPress={toggleThumbOverlay}
               style={({ pressed }) => [styles.debugButton, pressed && styles.debugButtonPressed]}
             >
-              <Text style={styles.debugButtonLabel}>{thumbOverlayVisible ? 'Overlay: ON' : 'Overlay: OFF'}</Text>
+              <Text style={styles.debugButtonLabel}>OVRL</Text>
             </Pressable>
           </View>
-        </View>
+        </SafeAreaView>
       ) : null}
     </AppProviders>
   );
@@ -105,8 +119,8 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     pointerEvents: 'box-none',
     paddingRight: 12,
-    paddingTop: 12,
-    zIndex: 10000,
+    paddingTop: 4,
+    zIndex: 2147483001,
   },
   debugButtonRow: {
     flexDirection: 'row',

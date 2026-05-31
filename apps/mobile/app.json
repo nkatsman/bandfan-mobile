@@ -4,7 +4,7 @@
     "slug": "bandfan-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/BandFan/BF Light No shadow.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
     "scheme": "bandfan-mobile",
@@ -18,15 +18,20 @@
     },
     "android": {
       "package": "space.bandfan.mobile",
+      "permissions": [
+        "WAKE_LOCK",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ],
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/BandFan/BF Light No shadow.png",
         "backgroundColor": "#FFF9EF"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/BandFan/BF Light No shadow.png"
     },
     "plugins": [
       "expo-router",

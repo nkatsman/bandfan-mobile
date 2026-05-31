@@ -5,20 +5,25 @@ import { DEBUG_THUMB_ZONES_ENABLED } from '../config/debug-mode';
 
 const debugModeStorageKey = 'bandfan-mobile-debug-mode';
 
+type ColorOverlayMode = 'off' | 'left' | 'right';
+
 type DebugState = {
+  colorOverlayMode: ColorOverlayMode;
   debugModeEnabled: boolean;
   hydrateDebugMode: () => Promise<void>;
   setDebugModeEnabled: (enabled: boolean) => void;
   thumbOverlayVisible: boolean;
+  toggleColorOverlay: () => void;
   toggleThumbOverlay: () => void;
 };
 
 export const useDebugStore = create<DebugState>((set) => ({
+  colorOverlayMode: 'off',
   debugModeEnabled: false,
   hydrateDebugMode: async () => {
     try {
       const storedMode = await AsyncStorage.getItem(debugModeStorageKey);
-      const enabled = __DEV__ && storedMode === 'on';
+      const enabled = storedMode === 'on';
 
       set(() => ({
         debugModeEnabled: enabled,
@@ -29,13 +34,17 @@ export const useDebugStore = create<DebugState>((set) => ({
     }
   },
   setDebugModeEnabled: (enabled) => {
-    const nextEnabled = __DEV__ && enabled;
+    const nextEnabled = enabled;
     set(() => ({
       debugModeEnabled: nextEnabled,
+      colorOverlayMode: nextEnabled ? 'off' : 'off',
       thumbOverlayVisible: nextEnabled ? DEBUG_THUMB_ZONES_ENABLED : false,
     }));
     void AsyncStorage.setItem(debugModeStorageKey, nextEnabled ? 'on' : 'off');
   },
   thumbOverlayVisible: false,
+  toggleColorOverlay: () => set((state) => ({
+    colorOverlayMode: state.colorOverlayMode === 'off' ? 'left' : state.colorOverlayMode === 'left' ? 'right' : 'off',
+  })),
   toggleThumbOverlay: () => set((state) => ({ thumbOverlayVisible: !state.thumbOverlayVisible })),
 }));

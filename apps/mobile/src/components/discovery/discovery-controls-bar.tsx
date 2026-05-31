@@ -1,5 +1,6 @@
 import { type ReactNode, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import Svg, { Circle, Line, Path } from 'react-native-svg';
 
 import SortAscIcon from '../../../assets/Icons/sort-asc.svg';
 import SortDescIcon from '../../../assets/Icons/sort-desc.svg';
@@ -20,7 +21,13 @@ type DiscoveryControlsBarProps = {
 
 const FILTER_OPTIONS: SongTableFilterMode[] = ['all', 'released', 'in-progress', 'demo'];
 const DEFAULT_SORT_OPTIONS: SongTableSortMode[] = ['best-new', 'published-desc', 'plays-desc', 'votes-desc'];
-const DARK_GREY_BUTTON_FILL = '#3A3A38';
+const DARK_CONTROL_BORDER = '#1A1A19';
+const DARK_SEARCH_INPUT_FILL = '#1A1A19';
+const DARK_CONTROL_TEXT = '#FFFFFF';
+const DARK_CONTROL_ICON = '#6EA06E';
+const LIGHT_CONTROL_ICON = '#4C79AE';
+const SEARCH_FILTER_SORT_Z_INDEX = 4000;
+const THREE_DOT_MENU_Z_INDEX = 3000;
 
 function getFilterLabel(mode: SongTableFilterMode) {
   if (mode === 'released') {
@@ -70,6 +77,76 @@ function getSortDirection(mode: SongTableSortMode) {
   return null;
 }
 
+function FilterIcon({ color, size = 16 }: { color: string; size?: number }) {
+  return (
+    <Svg fill="none" height={size} viewBox="0 0 24 24" width={size}>
+      <Path d="M4 5h16l-6 7v5l-4 2v-7L4 5Z" stroke={color} strokeLinejoin="round" strokeWidth={2} />
+    </Svg>
+  );
+}
+
+function FocusIcon({ color, size = 16 }: { color: string; size?: number }) {
+  return (
+    <Svg fill="none" height={size} viewBox="0 0 24 24" width={size}>
+      <Circle cx={12} cy={12} r={3} fill={color} />
+      <Path d="M4 9V5h4M16 5h4v4M20 15v4h-4M8 19H4v-4" stroke={color} strokeLinecap="square" strokeWidth={2} />
+    </Svg>
+  );
+}
+
+function CheckDoubleIcon({ color, size = 16 }: { color: string; size?: number }) {
+  return (
+    <Svg fill="none" height={size} viewBox="0 0 24 24" width={size}>
+      <Path d="M3 12l4 4L15 8" stroke={color} strokeLinecap="square" strokeLinejoin="round" strokeWidth={2} />
+      <Path d="M11 15l2 2 8-9" stroke={color} strokeLinecap="square" strokeLinejoin="round" strokeWidth={2} />
+    </Svg>
+  );
+}
+
+function ToolsIcon({ color, size = 16 }: { color: string; size?: number }) {
+  return (
+    <Svg fill="none" height={size} viewBox="0 0 24 24" width={size}>
+      <Path d="M14 6l4 4M5 19l7-7M13 5l6 6-2 2-6-6 2-2Z" stroke={color} strokeLinecap="square" strokeLinejoin="round" strokeWidth={2} />
+      <Path d="M7 8a4 4 0 0 1 5-5L9 6l2 2 3-3a4 4 0 0 1-5 5l-5 5-2-2 5-5Z" stroke={color} strokeLinejoin="round" strokeWidth={2} />
+    </Svg>
+  );
+}
+
+function LightbulbIcon({ color, size = 16 }: { color: string; size?: number }) {
+  return (
+    <Svg fill="none" height={size} viewBox="0 0 24 24" width={size}>
+      <Path d="M9 18h6M10 22h4" stroke={color} strokeLinecap="square" strokeWidth={2} />
+      <Path d="M8 13a6 6 0 1 1 8 0c-1 1-1.5 2-1.5 3h-5c0-1-.5-2-1.5-3Z" stroke={color} strokeLinejoin="round" strokeWidth={2} />
+      <Line stroke={color} strokeLinecap="square" strokeWidth={2} x1={12} x2={12} y1={1} y2={3} />
+    </Svg>
+  );
+}
+
+function getFilterIcon(mode: SongTableFilterMode, color: string) {
+  if (mode === 'released') {
+    return <CheckDoubleIcon color={color} />;
+  }
+
+  if (mode === 'in-progress') {
+    return <ToolsIcon color={color} />;
+  }
+
+  if (mode === 'demo') {
+    return <LightbulbIcon color={color} />;
+  }
+
+  return <FilterIcon color={color} />;
+}
+
+function getSortIcon(mode: SongTableSortMode, color: string) {
+  if (mode === 'best-new') {
+    return <FocusIcon color={color} />;
+  }
+
+  const SortIcon = getSortDirection(mode) === 'asc' ? SortAscIcon : SortDescIcon;
+  return <SortIcon color={color} height={16} width={16} />;
+}
+
 function toggleSortMode(currentMode: SongTableSortMode, selectedMode: SongTableSortMode): SongTableSortMode {
   if (!getSortDirection(selectedMode)) {
     return selectedMode;
@@ -106,8 +183,7 @@ export function DiscoveryControlsBar({
     onSortChange(toggleSortMode(sortMode, nextSortMode));
   }
 
-  const sortDirection = getSortDirection(sortMode);
-  const SortButtonIcon = sortDirection === 'asc' ? SortAscIcon : sortDirection === 'desc' ? SortDescIcon : null;
+  const iconColor = isDark ? DARK_CONTROL_ICON : LIGHT_CONTROL_ICON;
 
   return (
     <View style={styles.controlsRow}>
@@ -116,34 +192,34 @@ export function DiscoveryControlsBar({
         <TextInput
           onChangeText={onSearchChange}
           placeholder="Search"
-          placeholderTextColor={theme.palette.fog}
+          placeholderTextColor={isDark ? DARK_CONTROL_TEXT : theme.palette.fog}
           style={[styles.searchInput, isDark && styles.searchInputDark]}
           value={searchQuery}
         />
       </View>
       <View style={styles.controlGroup}>
-        <ControlDockButton label={getFilterLabel(filterMode)} onPress={() => setOpenMenu((current) => (current === 'filter' ? null : 'filter'))} styles={styles} />
+        <ControlDockButton icon={getFilterIcon(filterMode, iconColor)} label={getFilterLabel(filterMode)} onPress={() => setOpenMenu((current) => (current === 'filter' ? null : 'filter'))} styles={styles} />
         {openMenu === 'filter' ? (
           <View style={styles.dropdownMenu}>
             {FILTER_OPTIONS.map((option) => (
-              <DropdownOption active={option === filterMode} key={option} label={getFilterLabel(option)} onPress={() => selectFilter(option)} styles={styles} />
+              <DropdownOption active={option === filterMode} icon={getFilterIcon(option, iconColor)} key={option} label={getFilterLabel(option)} onPress={() => selectFilter(option)} styles={styles} />
             ))}
           </View>
         ) : null}
       </View>
       <View style={styles.controlGroup}>
-        <ControlDockButton icon={SortButtonIcon ? <SortButtonIcon color={theme.ui.textPrimary} height={16} width={16} /> : null} label={getSortLabel(sortMode)} onPress={() => setOpenMenu((current) => (current === 'sort' ? null : 'sort'))} styles={styles} wide />
+        <ControlDockButton icon={getSortIcon(sortMode, iconColor)} label={getSortLabel(sortMode)} onPress={() => setOpenMenu((current) => (current === 'sort' ? null : 'sort'))} styles={styles} wide />
         {openMenu === 'sort' ? (
           <View style={[styles.dropdownMenu, styles.sortDropdownMenu]}>
             {availableSortModes.map((option) => {
               const active = getSortBase(option) === getSortBase(sortMode);
               const optionDirection = active ? getSortDirection(sortMode) : getSortDirection(option);
-              const OptionIcon = optionDirection === 'asc' ? SortAscIcon : optionDirection === 'desc' ? SortDescIcon : null;
+              const optionIconMode = optionDirection ? (`${getSortBase(option)}-${optionDirection}` as SongTableSortMode) : option;
 
               return (
                 <DropdownOption
                   active={active}
-                  icon={OptionIcon ? <OptionIcon color={theme.ui.textPrimary} height={16} width={16} /> : null}
+                  icon={getSortIcon(optionIconMode, iconColor)}
                   key={option}
                   label={getSortLabel(option)}
                   onPress={() => selectSort(option)}
@@ -207,8 +283,8 @@ function createStyles(
   return StyleSheet.create({
     controlsRow: {
       alignItems: 'center',
-      backgroundColor: DS.color.background,
-      borderTopColor: colors.borderStrong,
+      backgroundColor: mode === 'dark' ? colors.appBackground : DS.color.background,
+      borderTopColor: mode === 'dark' ? DARK_CONTROL_BORDER : colors.borderStrong,
       borderTopWidth: DS.stroke.fine,
       flexDirection: 'row',
       gap: spacing.xs,
@@ -216,18 +292,19 @@ function createStyles(
       paddingHorizontal: spacing.sm,
       paddingVertical: spacing.xs,
       position: 'relative',
+      zIndex: SEARCH_FILTER_SORT_Z_INDEX,
     },
     searchShell: {
       backgroundColor: colors.surfaceCard,
-      borderColor: colors.borderStrong,
+      borderColor: mode === 'dark' ? DARK_CONTROL_BORDER : colors.borderStrong,
       borderWidth: DS.stroke.fine,
       flex: 1,
       minHeight: 40,
       paddingHorizontal: spacing.sm,
     },
     searchShellDark: {
-      backgroundColor: mode === 'dark' ? '#FFFFFF' : colors.surfaceCard,
-      borderColor: colors.borderStrong,
+      backgroundColor: mode === 'dark' ? DARK_SEARCH_INPUT_FILL : colors.surfaceCard,
+      borderColor: mode === 'dark' ? DARK_CONTROL_BORDER : colors.borderStrong,
     },
     searchInput: {
       color: colors.textPrimary,
@@ -239,12 +316,12 @@ function createStyles(
       paddingVertical: 0,
     },
     searchInputDark: {
-      color: colors.textPrimary,
+      color: DARK_CONTROL_TEXT,
     },
     controlButton: {
       alignItems: 'center',
-      backgroundColor: mode === 'dark' ? DARK_GREY_BUTTON_FILL : colors.surfaceCard,
-      borderColor: colors.borderStrong,
+      backgroundColor: mode === 'dark' ? colors.buttonPrimary : colors.surfaceCard,
+      borderColor: mode === 'dark' ? DARK_CONTROL_BORDER : colors.borderStrong,
       borderWidth: DS.stroke.fine,
       flexDirection: 'row',
       gap: 4,
@@ -262,7 +339,7 @@ function createStyles(
       zIndex: 5,
     },
     controlButtonLabel: {
-      color: colors.textPrimary,
+      color: mode === 'dark' ? DARK_CONTROL_TEXT : colors.textPrimary,
       fontFamily: 'IBMPlexMono',
       fontSize: typeScale.caption,
       fontWeight: DS.font.weight.bold,
@@ -276,8 +353,8 @@ function createStyles(
       zIndex: 4,
     },
     dropdownMenu: {
-      backgroundColor: mode === 'dark' ? DARK_GREY_BUTTON_FILL : colors.surfaceCard,
-      borderColor: colors.borderStrong,
+      backgroundColor: mode === 'dark' ? colors.buttonPrimary : colors.surfaceCard,
+      borderColor: mode === 'dark' ? DARK_CONTROL_BORDER : colors.borderStrong,
       borderWidth: DS.stroke.fine,
       bottom: 48,
       minWidth: 148,
@@ -287,11 +364,11 @@ function createStyles(
       shadowOffset: { width: DS.shadow.fine.x, height: DS.shadow.fine.y },
       shadowOpacity: 1,
       shadowRadius: 0,
-      zIndex: 20,
+      zIndex: THREE_DOT_MENU_Z_INDEX,
     },
     dropdownOption: {
       alignItems: 'center',
-      borderBottomColor: colors.borderStrong,
+      borderBottomColor: mode === 'dark' ? DARK_CONTROL_BORDER : colors.borderStrong,
       borderBottomWidth: 1,
       flexDirection: 'row',
       gap: spacing.xs,
@@ -309,14 +386,14 @@ function createStyles(
       backgroundColor: colors.buttonPrimary,
     },
     dropdownOptionLabel: {
-      color: colors.textPrimary,
+      color: mode === 'dark' ? DARK_CONTROL_TEXT : colors.textPrimary,
       fontFamily: 'IBMPlexMono',
       fontSize: typeScale.caption,
       flex: 1,
       fontWeight: DS.font.weight.bold,
     },
     dropdownOptionLabelActive: {
-      color: colors.textPrimary,
+      color: mode === 'dark' ? DARK_CONTROL_TEXT : colors.textPrimary,
     },
     sortButton: {
       minWidth: 108,

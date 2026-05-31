@@ -59,7 +59,7 @@ export function AccountScreen() {
   const usernameValidationError = getUsernameValidationError(normalizedUsernameDraft);
   const emailChanged = normalizedEmailDraft !== savedEmail;
   const usernameChanged = normalizedUsernameDraft !== savedUsername;
-  const isAdmin = Boolean(profile?.roles.admin || profile?.roles.Admin);
+  const isAdmin = Boolean(profile && Object.entries(profile.roles).some(([role, enabled]) => enabled && role.toLowerCase() === 'admin'));
   const displayNameMutation = useMutation({
     mutationFn: updateAccountDisplayName,
     onError: (error) => {

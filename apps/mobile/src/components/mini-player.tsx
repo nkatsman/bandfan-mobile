@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Animated, Image, Modal, PanResponder, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import CoverArtPlaceholder from '../../assets/BandFan/BF Cover Art Placeholder.svg';
@@ -13,6 +13,7 @@ import TriangleOutlineIcon from '../../assets/Icons/triangle-line.svg';
 import { DS } from '../design/ds';
 import { radii, spacing, typeScale } from '../design/tokens';
 import { useAppTheme } from '../design/theme';
+import { getCachedImageSrc } from '../lib/image-cache';
 import { usePlayerStore } from '../state/player-store';
 import { useSongLikeAction } from '../features/preferences/use-song-like-action';
 import { useSongReleaseSupportAction } from '../features/release-support/use-song-release-support-action';
@@ -21,8 +22,12 @@ import { SurfaceCard } from './surface-card';
 import { SeekBar } from './ui/seek-bar';
 
 const LIGHT_PLAY_CONTROL_FILL = '#FFFFFF';
-const LIGHT_PLAY_CONTROL_STROKE = '#222220';
+const LIGHT_PLAY_CONTROL_STROKE = '#222222';
+const MINI_PLAYER_DARK_TEXT = '#1A1A19';
+const DARK_COVER_ART_BORDER = '#1A1A19';
+const DARK_VOTE_ICON_COLOR = '#4C79AE';
 const PLAY_ICON_TO_BUTTON_RATIO = 34 / 44;
+const HIDDEN_MINI_PLAYER_OFFSET = 0;
 
 export function MiniPlayer({ compact = false }: { compact?: boolean }) {
   const { width } = useWindowDimensions();
@@ -31,10 +36,10 @@ export function MiniPlayer({ compact = false }: { compact?: boolean }) {
   const isFullPlayerOpen = usePlayerStore((state) => state.isFullPlayerOpen);
   const isMiniPlayerHidden = usePlayerStore((state) => state.isMiniPlayerHidden);
   const isPlaying = usePlayerStore((state) => state.isPlaying);
-  const isSongSheetOpen = usePlayerStore((state) => state.isSongSheetOpen);
+  const nextTrack = usePlayerStore((state) => state.nextTrack);
   const progressPercent = usePlayerStore((state) => state.progressPercent);
-  const closeSongSheet = usePlayerStore((state) => state.closeSongSheet);
   const openFullPlayer = usePlayerStore((state) => state.openFullPlayer);
+  const previousTrack = usePlayerStore((state) => state.previousTrack);
   const seekToPercent = usePlayerStore((state) => state.seekToPercent);
   const setMiniPlayerHidden = usePlayerStore((state) => state.setMiniPlayerHidden);
   const stopPlayback = usePlayerStore((state) => state.stopPlayback);
@@ -43,11 +48,26 @@ export function MiniPlayer({ compact = false }: { compact?: boolean }) {
   const { isSongReleaseSupportPending, toggleSongReleaseSupport } = useSongReleaseSupportAction();
   const theme = useAppTheme();
   const isPhoneLayout = compact || width < 600;
-  const likeActiveColor = '#CD4B4B';
+  const likeActiveColor = theme.ui.buttonLikeActive;
+  const voteIconColor = theme.mode === 'dark' ? DARK_VOTE_ICON_COLOR : theme.ui.buttonVoteActive;
   const miniPlayButtonSize = isPhoneLayout ? 64 : 92;
   const miniPlayIconSize = Math.round(miniPlayButtonSize * PLAY_ICON_TO_BUTTON_RATIO);
-  const styles = useMemo(() => createStyles(theme.ui, isPhoneLayout), [theme, isPhoneLayout]);
+  const styles = useMemo(() => createStyles(theme, isPhoneLayout), [theme, isPhoneLayout]);
   const dragOffset = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+  const hiddenProgress = useRef(new Animated.Value(isMiniPlayerHidden ? 1 : 0)).current;
+  const hiddenTranslateY = hiddenProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, HIDDEN_MINI_PLAYER_OFFSET],
+  });
+  const miniPlayerTranslateY = Animated.add(hiddenTranslateY, dragOffset.y);
+
+  useEffect(() => {
+    Animated.timing(hiddenProgress, {
+      duration: isMiniPlayerHidden ? 210 : 170,
+      toValue: isMiniPlayerHidden ? 1 : 0,
+      useNativeDriver: true,
+    }).start();
+  }, [hiddenProgress, isMiniPlayerHidden]);
 
   const miniPlayerPanResponder = useMemo(
     () =>
@@ -83,7 +103,7 @@ export function MiniPlayer({ compact = false }: { compact?: boolean }) {
                 useNativeDriver: true,
               }).start(() => {
                 dragOffset.setValue({ x: 0, y: 0 });
-                  openFullPlayer();
+                openFullPlayer();
               });
               return;
             }
@@ -119,7 +139,7 @@ export function MiniPlayer({ compact = false }: { compact?: boolean }) {
           if (gestureState.dy > 34) {
             Animated.timing(dragOffset, {
               duration: 120,
-              toValue: { x: 0, y: 72 },
+              toValue: { x: 0, y: HIDDEN_MINI_PLAYER_OFFSET },
               useNativeDriver: true,
             }).start(() => {
               dragOffset.setValue({ x: 0, y: 0 });
@@ -140,95 +160,39 @@ export function MiniPlayer({ compact = false }: { compact?: boolean }) {
 
   return (
     <View style={[styles.container, compact && styles.containerCompact, isMiniPlayerHidden && styles.containerHidden]}>
-      <Modal animationType="fade" onRequestClose={closeSongSheet} transparent visible={isSongSheetOpen}>
-        <View style={styles.sheetRoot}>
-          <Pressable accessibilityRole="button" onPress={closeSongSheet} style={styles.sheetBackdrop} />
-          <View style={styles.sheetWrap}>
-            <SurfaceCard style={styles.sheetCard} tone="player">
-              <View style={styles.sheetHeader}>
-                <View style={styles.sheetHandle} />
-                <Pressable accessibilityRole="button" onPress={closeSongSheet} style={({ pressed }) => [styles.sheetClose, pressed && styles.buttonPressed]}>
-                  <Text style={styles.sheetCloseLabel}>CLOSE</Text>
-                </Pressable>
-              </View>
-
-              <View style={styles.sheetHeroRow}>
-                {activeSong.coverArtUrl ? (
-                  <Image source={{ uri: activeSong.coverArtUrl }} style={styles.sheetArtworkImage} />
-                ) : (
-                  <View style={styles.sheetArtwork}>
-                    <CoverArtPlaceholder height={124} width={124} />
-                  </View>
-                )}
-
-                <View style={styles.sheetMeta}>
-                  <Text numberOfLines={2} style={styles.sheetTitle}>
-                    {activeSong.title}
-                  </Text>
-                  <Text numberOfLines={1} style={styles.sheetArtist}>
-                    {activeSong.artist}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.sheetTransportRow}>
-                <View style={styles.sheetSmallIconShell}>
-                  <SkipBackIcon height={24} width={24} />
-                </View>
-                <View style={styles.sheetSeekWrap}>
-                  <SeekBar onSeek={seekToPercent} value={progressPercent} />
-                </View>
-                <View style={styles.sheetSmallIconShell}>
-                  <SkipForwardIcon height={24} width={24} />
-                </View>
-              </View>
-
-              <View style={styles.sheetActionsRow}>
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={isSongReleaseSupportPending(activeSong.id)}
-                  onPress={() => toggleSongReleaseSupport(activeSong)}
-                  style={({ pressed }) => [styles.sheetIconButton, pressed && styles.buttonPressed]}
-                >
-                  {activeSong.voted ? <TriangleFilledIcon color={theme.ui.buttonVoteActive} height={28} width={28} /> : <TriangleOutlineIcon height={28} width={28} />}
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={isSongLikePending(activeSong.id)}
-                  onPress={() => toggleSongLike(activeSong)}
-                  style={({ pressed }) => [styles.sheetIconButton, pressed && styles.buttonPressed]}
-                >
-                  {activeSong.liked ? <HeartFilledIcon color={likeActiveColor} height={28} width={28} /> : <HeartIcon height={28} width={28} />}
-                </Pressable>
-                <Pressable accessibilityRole="button" onPress={togglePlayback} style={({ pressed }) => [styles.sheetPlayButton, pressed && styles.sheetTransportPressed]}>
-                  {isPlaying ? <PauseIcon color={LIGHT_PLAY_CONTROL_STROKE} height={43} width={43} /> : <PlayIcon color={LIGHT_PLAY_CONTROL_STROKE} height={43} width={43} />}
-                </Pressable>
-              </View>
-            </SurfaceCard>
-          </View>
-        </View>
-      </Modal>
-
       <Modal animationType="slide" onRequestClose={closeFullPlayer} visible={isFullPlayerOpen}>
-        <FullPlayerPanel includeBottomMenu onCollapse={closeFullPlayer} />
+        <FullPlayerPanel includeBottomMenu onCollapse={closeFullPlayer} onNavigate={closeFullPlayer} />
       </Modal>
 
-      {isMiniPlayerHidden ? (
-        <Animated.View style={[styles.hiddenGestureLayer, { transform: dragOffset.getTranslateTransform() }]} {...miniPlayerPanResponder.panHandlers}>
-          <SurfaceCard style={[styles.shell, compact && styles.shellCompact, styles.hiddenShell]} tone="player">
-            <Pressable accessibilityLabel="Show mini player" accessibilityRole="button" onPress={() => setMiniPlayerHidden(false)} style={styles.hiddenHandle}>
-              <Text numberOfLines={1} style={styles.hiddenHandleText}>Now playing: {activeSong.artist} - {activeSong.title}</Text>
+      <Animated.View
+        style={[
+          styles.gestureLayer,
+          { transform: [{ translateX: dragOffset.x }, { translateY: miniPlayerTranslateY }] },
+        ]}
+        {...miniPlayerPanResponder.panHandlers}
+      >
+        <SurfaceCard style={[styles.shell, compact && styles.shellCompact, isMiniPlayerHidden && styles.hiddenShell]} tone="player">
+          {isMiniPlayerHidden ? (
+            <Pressable accessibilityRole="button" onPress={() => setMiniPlayerHidden(false)} style={styles.hiddenPeekRow}>
+              {activeSong.coverArtUrl ? (
+                <Image source={{ uri: getCachedImageSrc(activeSong.coverArtUrl) }} style={styles.hiddenArtworkImage} />
+              ) : (
+                <View style={styles.hiddenArtwork}>
+                  <CoverArtPlaceholder height={44} width={44} />
+                </View>
+              )}
+              <View style={styles.hiddenMetaColumn}>
+                <Text style={styles.nowPlayingLabel}>Now playing</Text>
+                <Text numberOfLines={1} style={styles.hiddenTitle}>{activeSong.title}</Text>
+                <Text numberOfLines={1} style={styles.hiddenArtist}>{activeSong.artist}</Text>
+              </View>
             </Pressable>
-          </SurfaceCard>
-        </Animated.View>
-      ) : (
-      <Animated.View style={[styles.gestureLayer, { transform: dragOffset.getTranslateTransform() }]} {...miniPlayerPanResponder.panHandlers}>
-        <SurfaceCard style={[styles.shell, compact && styles.shellCompact]} tone="player">
-          <View style={styles.row}>
+          ) : (
+            <View style={styles.row}>
           <View style={styles.leftColumn}>
             <View style={styles.headerRow}>
               {activeSong.coverArtUrl ? (
-                <Image source={{ uri: activeSong.coverArtUrl }} style={styles.artworkImage} />
+                <Image source={{ uri: getCachedImageSrc(activeSong.coverArtUrl) }} style={styles.artworkImage} />
               ) : (
                 <View style={styles.artwork}>
                   <CoverArtPlaceholder height={64} width={64} />
@@ -254,7 +218,7 @@ export function MiniPlayer({ compact = false }: { compact?: boolean }) {
                         onPress={() => toggleSongReleaseSupport(activeSong)}
                         style={({ pressed }) => [styles.utilityIconShell, pressed && styles.buttonPressed]}
                       >
-                        {activeSong.voted ? <TriangleFilledIcon color={theme.ui.buttonVoteActive} height={36} width={36} /> : <TriangleOutlineIcon height={36} width={36} />}
+                        {activeSong.voted ? <TriangleFilledIcon color={voteIconColor} height={36} width={36} /> : <TriangleOutlineIcon color={voteIconColor} height={36} width={36} />}
                       </Pressable>
                       <Text style={styles.iconLabel}>Vote</Text>
                     </View>
@@ -275,15 +239,15 @@ export function MiniPlayer({ compact = false }: { compact?: boolean }) {
             </View>
 
             <View style={styles.transportRow}>
-              <View style={styles.smallIconShell}>
-                <SkipBackIcon height={20} width={20} />
-              </View>
+              <Pressable accessibilityLabel="Previous track" accessibilityRole="button" onPress={previousTrack} style={({ pressed }) => [styles.smallIconShell, pressed && styles.buttonPressed]}>
+                <SkipBackIcon color={theme.mode === 'dark' ? MINI_PLAYER_DARK_TEXT : theme.ui.textPrimary} height={20} width={20} />
+              </Pressable>
               <View style={styles.seekWrap}>
                 <SeekBar onSeek={seekToPercent} value={progressPercent} />
               </View>
-              <View style={styles.smallIconShell}>
-                <SkipForwardIcon height={20} width={20} />
-              </View>
+              <Pressable accessibilityLabel="Next track" accessibilityRole="button" onPress={nextTrack} style={({ pressed }) => [styles.smallIconShell, pressed && styles.buttonPressed]}>
+                <SkipForwardIcon color={theme.mode === 'dark' ? MINI_PLAYER_DARK_TEXT : theme.ui.textPrimary} height={20} width={20} />
+              </Pressable>
             </View>
           </View>
 
@@ -299,7 +263,7 @@ export function MiniPlayer({ compact = false }: { compact?: boolean }) {
                   onPress={() => toggleSongReleaseSupport(activeSong)}
                   style={({ pressed }) => [styles.compactUtilityIconShell, pressed && styles.buttonPressed]}
                 >
-                  {activeSong.voted ? <TriangleFilledIcon color={theme.ui.buttonVoteActive} height={22} width={22} /> : <TriangleOutlineIcon height={22} width={22} />}
+                  {activeSong.voted ? <TriangleFilledIcon color={voteIconColor} height={22} width={22} /> : <TriangleOutlineIcon color={voteIconColor} height={22} width={22} />}
                 </Pressable>
                 <Pressable
                   accessibilityRole="button"
@@ -312,15 +276,19 @@ export function MiniPlayer({ compact = false }: { compact?: boolean }) {
               </View>
             ) : null}
           </View>
-          </View>
+            </View>
+          )}
         </SurfaceCard>
       </Animated.View>
-      )}
     </View>
   );
 }
 
-function createStyles(colors: ReturnType<typeof useAppTheme>['ui'], isPhoneLayout: boolean) {
+function createStyles(theme: ReturnType<typeof useAppTheme>, isPhoneLayout: boolean) {
+  const colors = theme.ui;
+  const isDark = theme.mode === 'dark';
+  const playerTextColor = isDark ? MINI_PLAYER_DARK_TEXT : colors.textPrimary;
+
   return StyleSheet.create({
     container: {
       marginHorizontal: spacing.sm,
@@ -432,29 +400,23 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui'], isPhoneLayou
       backgroundColor: colors.surfaceCard,
       borderColor: colors.borderStrong,
       borderWidth: 2,
+      boxShadow: '4px 4px 0px #000000',
       justifyContent: 'center',
       minHeight: 52,
       minWidth: 52,
-      shadowColor: '#000000',
-      shadowOffset: { width: 2, height: 2 },
-      shadowOpacity: 1,
-      shadowRadius: 0,
     },
     sheetPlayButton: {
       alignItems: 'center',
       backgroundColor: LIGHT_PLAY_CONTROL_FILL,
       borderColor: LIGHT_PLAY_CONTROL_STROKE,
       borderWidth: 2,
+      boxShadow: '4px 4px 0px #000000',
       height: 64,
       justifyContent: 'center',
       width: 64,
-      shadowColor: '#000000',
-      shadowOffset: { width: 2, height: 2 },
-      shadowOpacity: 1,
-      shadowRadius: 0,
     },
     sheetTransportPressed: {
-      shadowOpacity: 0,
+      boxShadow: [],
       transform: [{ translateX: 1 }, { translateY: 1 }],
     },
     containerCompact: {
@@ -472,30 +434,64 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui'], isPhoneLayou
     gestureLayer: {
       width: '100%',
     },
-    hiddenGestureLayer: {
-      marginBottom: 0,
-      width: '100%',
-    },
-    hiddenShell: {
-      marginBottom: -4,
-    },
-    hiddenHandle: {
-      alignItems: 'center',
-      minHeight: 30,
-      justifyContent: 'center',
-      width: '100%',
-    },
-    hiddenHandleText: {
-      color: colors.textPrimary,
-      fontFamily: DS.font.family,
-      fontSize: typeScale.small,
-      fontWeight: '900',
-      lineHeight: 16,
-    },
     row: {
       alignItems: 'stretch',
       flexDirection: 'row',
       gap: isPhoneLayout ? spacing.sm : 40,
+    },
+    hiddenShell: {
+      marginBottom: spacing.sm,
+      minHeight: 82,
+    },
+    hiddenPeekRow: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      gap: spacing.sm,
+      minHeight: 70,
+    },
+    hiddenArtwork: {
+      alignItems: 'center',
+      backgroundColor: colors.surfaceCard,
+      borderColor: isDark ? DARK_COVER_ART_BORDER : colors.borderStrong,
+      borderRadius: radii.sm,
+      borderWidth: 2,
+      height: 52,
+      justifyContent: 'center',
+      width: 52,
+    },
+    hiddenArtworkImage: {
+      borderColor: isDark ? DARK_COVER_ART_BORDER : colors.borderStrong,
+      borderRadius: radii.sm,
+      borderWidth: 2,
+      height: 52,
+      width: 52,
+    },
+    hiddenMetaColumn: {
+      flex: 1,
+      minWidth: 0,
+    },
+    nowPlayingLabel: {
+      color: '#FFFFFF',
+      fontFamily: DS.font.family,
+      fontSize: typeScale.caption,
+      fontWeight: '900',
+      letterSpacing: 0.6,
+      lineHeight: 14,
+      textTransform: 'uppercase',
+    },
+    hiddenTitle: {
+      color: playerTextColor,
+      fontFamily: DS.font.family,
+      fontSize: typeScale.body,
+      fontWeight: '900',
+      lineHeight: 20,
+    },
+    hiddenArtist: {
+      color: playerTextColor,
+      fontFamily: DS.font.family,
+      fontSize: typeScale.small,
+      fontWeight: '400',
+      lineHeight: 16,
     },
     leftColumn: {
       flex: 1,
@@ -511,7 +507,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui'], isPhoneLayou
     artwork: {
       alignItems: 'center',
       backgroundColor: colors.surfaceCard,
-      borderColor: colors.borderStrong,
+      borderColor: isDark ? DARK_COVER_ART_BORDER : colors.borderStrong,
       borderRadius: radii.sm,
       borderWidth: 2,
       height: 64,
@@ -519,7 +515,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui'], isPhoneLayou
       width: 64,
     },
     artworkImage: {
-      borderColor: colors.borderStrong,
+      borderColor: isDark ? DARK_COVER_ART_BORDER : colors.borderStrong,
       borderRadius: radii.sm,
       borderWidth: 2,
       height: 64,
@@ -534,7 +530,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui'], isPhoneLayou
       minWidth: 0,
     },
     title: {
-      color: colors.textPrimary,
+      color: playerTextColor,
       flexShrink: 1,
       fontFamily: DS.font.family,
       fontSize: typeScale.body,
@@ -550,7 +546,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui'], isPhoneLayou
       marginTop: -2,
     },
     artist: {
-      color: colors.textPrimary,
+      color: playerTextColor,
       flex: 1,
       fontFamily: DS.font.family,
       fontSize: typeScale.small,
@@ -584,7 +580,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui'], isPhoneLayou
       width: 36,
     },
     iconLabel: {
-      color: colors.textPrimary,
+      color: playerTextColor,
       fontFamily: DS.font.family,
       fontSize: 9,
       fontWeight: '700',
@@ -611,16 +607,13 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui'], isPhoneLayou
       alignSelf: 'flex-start',
       alignItems: 'center',
       backgroundColor: LIGHT_PLAY_CONTROL_FILL,
-      borderColor: LIGHT_PLAY_CONTROL_STROKE,
-      borderWidth: 2,
+      borderWidth: 0,
+      boxShadow: isPhoneLayout ? `inset 0 0 0 2px ${LIGHT_PLAY_CONTROL_STROKE}, 4px 4px 0px #000000` : `inset 0 0 0 2px ${LIGHT_PLAY_CONTROL_STROKE}, 6px 6px 0px #000000`,
       height: isPhoneLayout ? 64 : 92,
       justifyContent: 'center',
       marginTop: 0,
+      overflow: 'hidden',
       width: isPhoneLayout ? 64 : 92,
-      shadowColor: '#000000',
-      shadowOffset: { width: isPhoneLayout ? 2 : 6, height: isPhoneLayout ? 2 : 6 },
-      shadowOpacity: 1,
-      shadowRadius: 0,
     },
     rightControlsColumn: {
       alignItems: 'center',
@@ -628,11 +621,11 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui'], isPhoneLayou
       width: isPhoneLayout ? 66 : 92,
     },
     transportButtonPressed: {
-      shadowOpacity: 0,
+      boxShadow: [],
       transform: [{ translateX: 1 }, { translateY: 1 }],
     },
     buttonPressed: {
-      shadowOpacity: 0,
+      boxShadow: [],
       transform: [{ translateX: 1 }, { translateY: 1 }],
     },
   });

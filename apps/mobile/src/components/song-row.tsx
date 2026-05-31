@@ -5,6 +5,7 @@ import CoverArtPlaceholder from '../../assets/BandFan/BF Cover Art Placeholder.s
 import { getActiveButtonColors } from '../design/button-active-colors';
 import { radii, spacing, typeScale } from '../design/tokens';
 import { useAppTheme } from '../design/theme';
+import { getCachedImageSrc } from '../lib/image-cache';
 import { Song } from '../types/music';
 import { SurfaceCard } from './surface-card';
 
@@ -19,14 +20,14 @@ type SongRowProps = {
 
 export function SongRow({ likePending = false, onPlay, onToggleLike, onToggleVote, song, votePending = false }: SongRowProps) {
   const theme = useAppTheme();
-  const styles = useMemo(() => createStyles(theme.ui), [theme]);
+  const styles = useMemo(() => createStyles(theme), [theme]);
 
   return (
     <SurfaceCard>
       <View style={styles.row}>
         <Pressable accessibilityRole="button" onPress={onPlay} style={styles.artworkPressable}>
           {song.coverArtUrl ? (
-            <Image source={{ uri: song.coverArtUrl }} style={styles.artworkImage} />
+            <Image source={{ uri: getCachedImageSrc(song.coverArtUrl) }} style={styles.artworkImage} />
           ) : (
             <View style={styles.artwork}>
               <CoverArtPlaceholder height={84} width={84} />
@@ -66,7 +67,7 @@ type ActionButtonProps = {
 
 function ActionButton({ active, disabled = false, label, onPress, tone }: ActionButtonProps) {
   const theme = useAppTheme();
-  const styles = useMemo(() => createStyles(theme.ui), [theme]);
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const activeButtonColors = useMemo(() => getActiveButtonColors(theme), [theme]);
   const backgroundColor = active ? (tone === 'liked' ? activeButtonColors.activeRed : activeButtonColors.activeGreen) : theme.ui.buttonMuted;
 
@@ -77,7 +78,10 @@ function ActionButton({ active, disabled = false, label, onPress, tone }: Action
   );
 }
 
-function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
+function createStyles(theme: ReturnType<typeof useAppTheme>) {
+  const colors = theme.ui;
+  const coverArtBorder = theme.mode === 'dark' ? '#1A1A19' : colors.borderStrong;
+
   return StyleSheet.create({
     row: {
       alignItems: 'stretch',
@@ -87,7 +91,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
     artwork: {
       alignItems: 'center',
       backgroundColor: colors.surfaceCard,
-      borderColor: colors.borderStrong,
+      borderColor: coverArtBorder,
       borderRadius: radii.md,
       borderWidth: 2,
       height: 84,
@@ -99,7 +103,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
       width: 84,
     },
     artworkImage: {
-      borderColor: colors.borderStrong,
+      borderColor: coverArtBorder,
       borderRadius: radii.md,
       borderWidth: 2,
       height: 84,
