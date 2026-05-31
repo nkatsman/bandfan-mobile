@@ -1,0 +1,34 @@
+[
+  {
+    "origin": [
+      "http://localhost:3000",
+      "https://bandfan.space",
+      "https://www.bandfan.space",
+      "https://bandfan--studio-2432658843-4876e.us-east4.hosted.app",
+      "https://studio-2432658843-4876e.web.app",
+      "https://studio-2432658843-4876e.firebaseapp.com"
+    ],
+    "method": [
+      "DELETE",
+      "GET",
+      "HEAD",
+      "POST",
+      "PUT"
+    ],
+    "responseHeader": [
+      "Authorization",
+      "Content-Type",
+      "Accept-Ranges",
+      "Content-Range",
+      "Content-Length",
+      "Access-Control-Allow-Origin",
+      "X-Firebase-Storage-Version",
+      "X-Goog-Upload-Command",
+      "X-Goog-Upload-Header-Content-Length",
+      "X-Goog-Upload-Header-Content-Type",
+      "X-Goog-Upload-Offset",
+      "X-Goog-Upload-Protocol"
+    ],
+    "maxAgeSeconds": 3600
+  }
+]
