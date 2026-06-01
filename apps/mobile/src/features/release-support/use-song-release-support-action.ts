@@ -10,22 +10,26 @@ import { sendReleaseSupport } from './release-support-api';
 
 export function useSongReleaseSupportAction() {
   const setSongVoted = useMusicStore((state) => state.setSongVoted);
+  const setPendingSongVoted = useMusicStore((state) => state.setPendingSongVoted);
   const syncPlayerVotedState = usePlayerStore((state) => state.setSongVoted);
   const [pendingSongIds, setPendingSongIds] = useState<string[]>([]);
 
   const mutation = useMutation({
     mutationFn: sendReleaseSupport,
     onError: (_error, variables) => {
+      setPendingSongVoted(variables.songId, null);
       setSongVoted(variables.songId, !variables.supported);
       syncPlayerVotedState(variables.songId, !variables.supported);
     },
     onMutate: async (variables) => {
       setPendingSongIds((current) => Array.from(new Set([...current, variables.songId])));
+      setPendingSongVoted(variables.songId, variables.supported);
       setSongVoted(variables.songId, variables.supported);
       syncPlayerVotedState(variables.songId, variables.supported);
     },
     onSettled: (_data, _error, variables) => {
       setPendingSongIds((current) => current.filter((songId) => songId !== variables.songId));
+      setPendingSongVoted(variables.songId, null);
     },
     onSuccess: (result) => {
       setSongVoted(result.songId, result.supported);

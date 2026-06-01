@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { DS } from '../../design/ds';
+import { AppBackgroundPattern } from '../../components/app-background-pattern';
 import { AppSidebar } from '../../components/app-sidebar';
 import { DiscoveryControlsBar } from '../../components/discovery/discovery-controls-bar';
 import { MusicPreferenceControls } from '../../components/music-preference-controls';
@@ -23,12 +24,15 @@ import { usePlayerStore } from '../../state/player-store';
 import { discoverySongsQueryDefaults, discoverySongsQueryKey, fetchDiscoverySongsForPreferences } from './discovery-api';
 
 const SEARCH_FILTER_SORT_Z_INDEX = 4000;
+const SONG_REACH_OFFSET = 48;
+const HEADER_CENTER_OFFSET = 24;
 
 export function DiscoveryScreen() {
   const theme = useAppTheme();
   const songs = useMusicStore((state) => state.songs);
   const replaceDiscoverySongs = useMusicStore((state) => state.replaceDiscoverySongs);
   const playSelection = usePlayerStore((state) => state.playSelection);
+  const setNormalizationEnabled = usePlayerStore((state) => state.setNormalizationEnabled);
   const { isSongLikePending, likeErrorMessage, toggleSongLike } = useSongLikeAction();
   const { isSongReleaseSupportPending, releaseSupportErrorMessage, toggleSongReleaseSupport } = useSongReleaseSupportAction();
   const [searchQuery, setSearchQuery] = useState('');
@@ -86,6 +90,10 @@ export function DiscoveryScreen() {
     }
   }, [discoveryQuery.data, replaceDiscoverySongs]);
 
+  useEffect(() => {
+    setNormalizationEnabled(playerSettings.normalizationEnabled);
+  }, [playerSettings.normalizationEnabled, setNormalizationEnabled]);
+
   const errorMessage =
     discoveryQuery.error instanceof ApiClientError
       ? discoveryQuery.error.message
@@ -93,12 +101,13 @@ export function DiscoveryScreen() {
         ? discoveryQuery.error.message
         : 'Discover could not load from the backend.';
 
-  const shouldRenderSongs = !hasApiBaseUrl || discoveryQuery.isSuccess;
+  const shouldRenderSongs = hasApiBaseUrl ? discoveryQuery.isSuccess : songs.length > 0;
   const isDiscoverLoading = hasApiBaseUrl && discoveryQuery.isLoading;
   const loadingDotCount = useLoadingDots(isDiscoverLoading);
 
   return (
     <View style={styles.root}>
+      <AppBackgroundPattern />
       <ScrollView
         {...pullToRefreshProps}
         contentContainerStyle={styles.content}
@@ -106,9 +115,11 @@ export function DiscoveryScreen() {
         style={styles.scrollArea}
       >
         {refreshIndicator}
-        <ScreenHeader counter={isDiscoverLoading ? formatLoadingText('Loading', loadingDotCount) : `${viewSongs.length} songs ready to play`} onLogoPress={() => setSidebarVisible(true)} title="Discover">
-          <MusicPreferenceControls />
-        </ScreenHeader>
+        <ScreenHeader counter={isDiscoverLoading ? formatLoadingText('Loading', loadingDotCount) : `${viewSongs.length} songs ready to play`} onLogoPress={() => setSidebarVisible(true)} title="Discover" verticalOffset={HEADER_CENTER_OFFSET} />
+
+        <View style={styles.musicControlsShelf}>
+          <MusicPreferenceControls layout="fill" showNormalization={false} />
+        </View>
 
         {hasApiBaseUrl && discoveryQuery.isError ? (
           <>
@@ -131,8 +142,10 @@ export function DiscoveryScreen() {
           </>
         ) : null}
 
-        {hasApiBaseUrl && discoveryQuery.isSuccess && viewSongs.length === 0 ? (
-          <Text style={styles.sectionTitle}>Discover Is Empty</Text>
+        {!hasApiBaseUrl ? (
+          <Text style={styles.sectionTitle}>No songs found.</Text>
+        ) : discoveryQuery.isSuccess && viewSongs.length === 0 ? (
+          <Text style={styles.sectionTitle}>No songs found.</Text>
         ) : null}
 
         {isDiscoverLoading || (shouldRenderSongs && viewSongs.length > 0) ? (
@@ -175,6 +188,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
     },
     scrollArea: {
       flex: 1,
+      position: 'relative',
+      zIndex: 1,
     },
     content: {
       paddingBottom: spacing.sm,
@@ -184,6 +199,15 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
       backgroundColor: colors.appBackground,
       position: 'relative',
       zIndex: SEARCH_FILTER_SORT_Z_INDEX,
+    },
+    musicControlsShelf: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.xs,
+      marginTop: SONG_REACH_OFFSET - HEADER_CENTER_OFFSET,
+      paddingBottom: spacing.xs,
+      paddingHorizontal: spacing.sm,
+      paddingTop: spacing.xs,
     },
     sectionTitle: {
       color: colors.textPrimary,

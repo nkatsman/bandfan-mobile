@@ -1,39 +1,150 @@
 import { create } from 'zustand';
-import { Audio, type AVPlaybackStatus } from 'expo-av';
+import { createAudioPlayer, setAudioModeAsync, setIsAudioActiveAsync, type AudioPlayer, type AudioStatus } from 'expo-audio';
+import type { EventSubscription } from 'expo-modules-core';
 
+import { claimPlaybackLease, fetchPlaybackLease, isPlaybackLeaseOwnedByThisDevice, releasePlaybackLease } from '../features/player/playback-lease-api';
+import { dbToNativeVolume, deriveEffectivePlaybackNormalizationGainDb } from '../lib/loudness';
 import { Song } from '../types/music';
 
-let playbackSound: Audio.Sound | null = null;
+let pendingPlayId = 0;
+let player: AudioPlayer | null = null;
+let playerSubscription: EventSubscription | null = null;
 let playbackSongId: string | null = null;
+let finishedSongId: string | null = null;
+let seekingUntil: number | null = null;
+let audioModeInitialized = false;
+let playIntentUntil: number | null = null;
+let activePlaybackLeaseId: string | null = null;
 
-function handlePlaybackStatus(status: AVPlaybackStatus) {
-  if (!status.isLoaded) {
-    if ('error' in status && status.error) {
-      usePlayerStore.setState({ isPlaying: false, progressPercent: 0 });
-    }
+async function claimCurrentPlaybackLease(songId: string) {
+  try {
+    const lease = await claimPlaybackLease(songId);
+    activePlaybackLeaseId = lease.leaseId;
+  } catch {
+    activePlaybackLeaseId = null;
+  }
+}
 
+async function releaseCurrentPlaybackLease() {
+  const leaseId = activePlaybackLeaseId;
+  activePlaybackLeaseId = null;
+
+  if (!leaseId) {
     return;
   }
 
+  try {
+    await releasePlaybackLease(leaseId);
+  } catch {
+    // Lease release is best-effort; the server TTL clears stale owners.
+  }
+}
+
+function hasFreshPlayIntent() {
+  return playIntentUntil !== null && Date.now() < playIntentUntil;
+}
+
+function clearCurrentPlayback() {
+  playIntentUntil = null;
+  player?.pause();
+  player?.clearLockScreenControls();
+  playbackSongId = null;
+  finishedSongId = null;
+}
+
+function syncNativePlayerVolume(song: Song | null, isNormalizationEnabled: boolean) {
+  if (!player) {
+    return;
+  }
+
+  player.volume = isNormalizationEnabled
+    ? dbToNativeVolume(deriveEffectivePlaybackNormalizationGainDb(song?.loudnessAnalysis))
+    : 1;
+}
+
+function releaseCurrentPlayer() {
+  playerSubscription?.remove();
+  playerSubscription = null;
+
+  if (!player) {
+    return;
+  }
+
+  try {
+    player.pause();
+    player.clearLockScreenControls();
+    player.remove();
+  } finally {
+    player = null;
+  }
+}
+
+async function resetNativeAudioBeforeNewSource() {
+  releaseCurrentPlayer();
+  await setIsAudioActiveAsync(false);
+  await setIsAudioActiveAsync(true);
+}
+
+function handlePlaybackStatus(status: AudioStatus) {
+  if (!status.isLoaded) {
+    usePlayerStore.setState({ currentSeconds: 0, durationSeconds: 0, isLoading: Boolean(playbackSongId) || hasFreshPlayIntent(), isPlaying: hasFreshPlayIntent() });
+    return;
+  }
+
+  if (status.playing) {
+    playIntentUntil = null;
+  }
+
+  const shouldShowPlaying = status.playing || hasFreshPlayIntent();
+
+  // Suppress progress updates while a programmatic seek is in-flight.
+  if (seekingUntil !== null) {
+    if (Date.now() < seekingUntil) {
+      usePlayerStore.setState({ isLoading: status.isBuffering, isPlaying: shouldShowPlaying });
+      return;
+    }
+    seekingUntil = null;
+  }
+
   const progressPercent =
-    typeof status.durationMillis === 'number' && status.durationMillis > 0
-      ? Math.max(0, Math.min(100, (status.positionMillis / status.durationMillis) * 100))
+    status.duration > 0
+      ? Math.max(0, Math.min(100, (status.currentTime / status.duration) * 100))
       : 0;
 
-  usePlayerStore.setState({ isPlaying: status.isPlaying, progressPercent });
+  usePlayerStore.setState((state) => ({
+    currentSeconds: status.currentTime,
+    durationSeconds: status.duration,
+    isLoading: status.isBuffering,
+    isMiniPlayerHidden: shouldShowPlaying && state.activeSong ? false : state.isMiniPlayerHidden,
+    isPlaying: shouldShowPlaying,
+    progressPercent,
+  }));
 
-  if (status.didJustFinish) {
+  if (status.didJustFinish && playbackSongId !== null && finishedSongId !== playbackSongId) {
+    finishedSongId = playbackSongId;
     advanceAfterTrackFinish();
   }
 }
 
 async function ensureAudioMode() {
-  await Audio.setAudioModeAsync({
-    allowsRecordingIOS: false,
-    playsInSilentModeIOS: true,
-    shouldDuckAndroid: true,
-    staysActiveInBackground: true,
+  if (audioModeInitialized) return;
+
+  await setAudioModeAsync({
+    allowsRecording: false,
+    playsInSilentMode: true,
+    interruptionMode: 'doNotMix',
+    shouldPlayInBackground: true,
+    shouldRouteThroughEarpiece: false,
   });
+
+  audioModeInitialized = true;
+}
+
+function getOrCreatePlayer(): AudioPlayer {
+  if (player) return player;
+  player = createAudioPlayer(null, { updateInterval: 250 });
+  playerSubscription = player.addListener('playbackStatusUpdate', handlePlaybackStatus);
+  return player;
 }
 
 function getNextQueueIndex(state: Pick<PlayerState, 'activeIndex' | 'isShuffleEnabled' | 'loopMode' | 'queue'>, automatic: boolean) {
@@ -43,10 +154,6 @@ function getNextQueueIndex(state: Pick<PlayerState, 'activeIndex' | 'isShuffleEn
 
   if (state.loopMode === 'track') {
     return state.activeIndex;
-  }
-
-  if (state.isShuffleEnabled && state.queue.length > 1) {
-    return getRandomQueueIndex(state.queue.length, state.activeIndex);
   }
 
   if (state.activeIndex >= state.queue.length - 1) {
@@ -62,6 +169,7 @@ function advanceAfterTrackFinish() {
 
     if (nextIndex < 0) {
       return {
+        isLoading: false,
         isPlaying: false,
         progressPercent: 100,
       };
@@ -73,6 +181,7 @@ function advanceAfterTrackFinish() {
     return {
       activeIndex: nextIndex,
       activeSong: nextSong,
+      isLoading: Boolean(nextSong?.audioUrl),
       isMiniPlayerHidden: false,
       isPlaying: Boolean(nextSong?.audioUrl),
       progressPercent: 0,
@@ -80,56 +189,90 @@ function advanceAfterTrackFinish() {
   });
 }
 
-async function unloadPlaybackSound() {
-  if (!playbackSound) {
-    return;
+function shuffleSongs(songs: Song[]) {
+  const shuffledSongs = [...songs];
+
+  for (let index = shuffledSongs.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [shuffledSongs[index], shuffledSongs[swapIndex]] = [shuffledSongs[swapIndex]!, shuffledSongs[index]!];
   }
 
-  const soundToUnload = playbackSound;
-  playbackSound = null;
-  playbackSongId = null;
+  return shuffledSongs;
+}
 
-  try {
-    soundToUnload.setOnPlaybackStatusUpdate(null);
-    await soundToUnload.unloadAsync();
-  } catch {
-    // Ignore unload failures so the next request can continue.
-  }
+function buildPlaybackQueue(queue: Song[], songId: string, sourceLabel: string, shouldShuffle: boolean) {
+  const nextQueue = queue.map((song) => ({ ...song, sourceLabel }));
+  const selectedIndex = Math.max(
+    nextQueue.findIndex((song) => song.id === songId),
+    0,
+  );
+  const selectedSong = nextQueue[selectedIndex] ?? null;
+  const remainingSongs = nextQueue.filter((_, index) => index !== selectedIndex);
+
+  return selectedSong ? [selectedSong, ...(shouldShuffle ? shuffleSongs(remainingSongs) : remainingSongs)] : nextQueue;
 }
 
 async function playSong(song: Song | null) {
+  const thisId = ++pendingPlayId;
+
   if (!song?.audioUrl) {
-    usePlayerStore.setState({ isPlaying: false });
+    clearCurrentPlayback();
+    usePlayerStore.setState({ isLoading: false, isPlaying: false });
     return;
   }
 
-  if (playbackSound && playbackSongId === song.id) {
-    const status = await playbackSound.getStatusAsync();
-
-    if (status.isLoaded && typeof status.durationMillis === 'number' && status.durationMillis - status.positionMillis < 250) {
-      await playbackSound.setPositionAsync(0);
+  // Same song — restart if near end, otherwise just play.
+  if (playbackSongId === song.id && player) {
+    try {
+      if (player.isLoaded && player.duration > 0 && player.duration - player.currentTime < 0.25) {
+        await player.seekTo(0);
+      }
+      if (pendingPlayId !== thisId) return;
+      player.play();
+    } catch {
+      usePlayerStore.setState({ isLoading: false, isPlaying: false });
     }
-
-    await playbackSound.playAsync();
     return;
   }
 
-  await unloadPlaybackSound();
-  await ensureAudioMode();
+  try {
+    playIntentUntil = Date.now() + 1200;
+    await resetNativeAudioBeforeNewSource();
+    if (pendingPlayId !== thisId) return;
 
-  const { sound } = await Audio.Sound.createAsync({ uri: song.audioUrl }, { shouldPlay: true }, handlePlaybackStatus);
+    await ensureAudioMode();
+    if (pendingPlayId !== thisId) return;
 
-  playbackSound = sound;
-  playbackSongId = song.id;
+    const p = getOrCreatePlayer();
+    p.replace({ uri: song.audioUrl });
+    if (pendingPlayId !== thisId) return;
+
+    syncNativePlayerVolume(song, usePlayerStore.getState().isNormalizationEnabled);
+
+    p.play();
+    playbackSongId = song.id;
+    finishedSongId = null;
+    void claimCurrentPlaybackLease(song.id);
+
+    p.setActiveForLockScreen(true, {
+      title: song.title,
+      artist: song.artist,
+      artworkUrl: song.coverArtUrl,
+    }, {
+      showSeekBackward: true,
+      showSeekForward: true,
+    });
+  } catch {
+    if (pendingPlayId === thisId) {
+      playIntentUntil = null;
+      usePlayerStore.setState({ isLoading: false, isPlaying: false });
+    }
+  }
 }
 
-async function pauseSong() {
-  if (!playbackSound) {
-    usePlayerStore.setState({ isPlaying: false });
-    return;
-  }
-
-  await playbackSound.pauseAsync();
+function pauseSong() {
+  playIntentUntil = null;
+  player?.pause();
 }
 
 type PlayerState = {
@@ -137,7 +280,10 @@ type PlayerState = {
   activeSong: Song | null;
   addToQueue: (song: Song) => void;
   closeFullPlayer: () => void;
+  currentSeconds: number;
+  durationSeconds: number;
   isFullPlayerOpen: boolean;
+  isLoading: boolean;
   isMiniPlayerHidden: boolean;
   isNormalizationEnabled: boolean;
   isPlaying: boolean;
@@ -151,7 +297,11 @@ type PlayerState = {
   queue: Song[];
   seekToPercent: (percent: number) => void;
   setMiniPlayerHidden: (isHidden: boolean) => void;
+  setNormalizationEnabled: (isEnabled: boolean) => void;
+  setPlaybackSettings: (settings: { isNormalizationEnabled?: boolean; isShuffleEnabled?: boolean; loopMode?: 'off' | 'queue' | 'track' }) => void;
   stopPlayback: () => void;
+  stopForRemotePlayback: () => void;
+  checkRemotePlaybackLease: () => Promise<void>;
   syncSongInteractionIds: (input: { likedSongIds: string[]; votedSongIds: string[] }) => void;
   setSongLiked: (songId: string, liked: boolean) => void;
   setSongVoted: (songId: string, voted: boolean) => void;
@@ -172,8 +322,11 @@ export const usePlayerStore = create<PlayerState>((set) => ({
 
       return { queue: [...state.queue, song] };
     }),
-  closeFullPlayer: () => set({ isFullPlayerOpen: false }),
+  closeFullPlayer: () => set({ isFullPlayerOpen: false, isMiniPlayerHidden: false }),
+  currentSeconds: 0,
+  durationSeconds: 0,
   isFullPlayerOpen: false,
+  isLoading: false,
   isMiniPlayerHidden: false,
   isNormalizationEnabled: false,
   isPlaying: false,
@@ -193,28 +346,30 @@ export const usePlayerStore = create<PlayerState>((set) => ({
       return {
         activeIndex: nextIndex,
         activeSong: nextSong,
+        isLoading: Boolean(nextSong?.audioUrl),
         isMiniPlayerHidden: false,
         isPlaying: true,
+        currentSeconds: 0,
+        durationSeconds: 0,
         progressPercent: 0,
       };
     }),
   openFullPlayer: () => set({ isFullPlayerOpen: true, isMiniPlayerHidden: false }),
   playSelection: (queue, songId, sourceLabel) =>
-    set(() => {
-      const nextQueue = queue.map((song) => ({ ...song, sourceLabel }));
-      const nextIndex = Math.max(
-        nextQueue.findIndex((song) => song.id === songId),
-        0,
-      );
-      const nextSong = nextQueue[nextIndex] ?? null;
+    set((state) => {
+      const nextQueue = buildPlaybackQueue(queue, songId, sourceLabel, state.isShuffleEnabled);
+      const nextSong = nextQueue[0] ?? null;
 
       void playSong(nextSong);
 
       return {
-        activeIndex: nextIndex,
+        activeIndex: nextSong ? 0 : -1,
         activeSong: nextSong,
+        isLoading: Boolean(nextSong?.audioUrl),
         isMiniPlayerHidden: false,
         isPlaying: true,
+        currentSeconds: 0,
+        durationSeconds: 0,
         progressPercent: 0,
         queue: nextQueue,
       };
@@ -232,8 +387,11 @@ export const usePlayerStore = create<PlayerState>((set) => ({
       return {
         activeIndex: previousIndex,
         activeSong: previousSong,
+        isLoading: Boolean(previousSong?.audioUrl),
         isMiniPlayerHidden: false,
         isPlaying: true,
+        currentSeconds: 0,
+        durationSeconds: 0,
         progressPercent: 0,
       };
     }),
@@ -241,31 +399,66 @@ export const usePlayerStore = create<PlayerState>((set) => ({
   seekToPercent: (percent) => {
     const clamped = Math.max(0, Math.min(100, percent));
 
+    if (!player || !player.isLoaded || player.duration <= 0) {
+      set({ progressPercent: clamped });
+      return;
+    }
+
+    seekingUntil = Date.now() + 500;
     set({ progressPercent: clamped });
 
-    void (async () => {
-      if (!playbackSound) {
-        return;
-      }
-
-      try {
-        const status = await playbackSound.getStatusAsync();
-
-        if (!status.isLoaded || typeof status.durationMillis !== 'number' || status.durationMillis <= 0) {
-          return;
-        }
-
-        const targetMillis = Math.round((clamped / 100) * status.durationMillis);
-        await playbackSound.setPositionAsync(targetMillis);
-      } catch {
-        // Ignore seek failures to avoid crashing playback controls.
-      }
-    })();
+    const targetSeconds = (clamped / 100) * player.duration;
+    void player.seekTo(targetSeconds).finally(() => {
+      seekingUntil = null;
+    });
   },
-  setMiniPlayerHidden: (isHidden) => set({ isMiniPlayerHidden: isHidden }),
+  setMiniPlayerHidden: (isHidden) => set({ isFullPlayerOpen: false, isMiniPlayerHidden: isHidden }),
+  setNormalizationEnabled: (isEnabled) => set((state) => {
+    syncNativePlayerVolume(state.activeSong, isEnabled);
+    return { isNormalizationEnabled: isEnabled };
+  }),
+  setPlaybackSettings: (settings) => set((state) => {
+    if (typeof settings.isNormalizationEnabled === 'boolean') {
+      syncNativePlayerVolume(state.activeSong, settings.isNormalizationEnabled);
+    }
+
+    return {
+      isNormalizationEnabled: settings.isNormalizationEnabled ?? state.isNormalizationEnabled,
+      isShuffleEnabled: settings.isShuffleEnabled ?? state.isShuffleEnabled,
+      loopMode: settings.loopMode ?? state.loopMode,
+    };
+  }),
   stopPlayback: () => {
-    void unloadPlaybackSound();
-    set({ activeIndex: -1, activeSong: null, isFullPlayerOpen: false, isMiniPlayerHidden: false, isPlaying: false, progressPercent: 0, queue: [] });
+    ++pendingPlayId;
+    void releaseCurrentPlaybackLease();
+    clearCurrentPlayback();
+    releaseCurrentPlayer();
+    set({ activeIndex: -1, activeSong: null, currentSeconds: 0, durationSeconds: 0, isFullPlayerOpen: false, isLoading: false, isMiniPlayerHidden: false, isPlaying: false, progressPercent: 0, queue: [] });
+  },
+  stopForRemotePlayback: () => {
+    ++pendingPlayId;
+    activePlaybackLeaseId = null;
+    clearCurrentPlayback();
+    releaseCurrentPlayer();
+    set({ activeIndex: -1, activeSong: null, currentSeconds: 0, durationSeconds: 0, isFullPlayerOpen: false, isLoading: false, isMiniPlayerHidden: false, isPlaying: false, progressPercent: 0, queue: [] });
+  },
+  checkRemotePlaybackLease: async () => {
+    const state = usePlayerStore.getState();
+
+    if (!state.activeSong || !state.isPlaying) {
+      return;
+    }
+
+    try {
+      const lease = await fetchPlaybackLease();
+      const ownedByThisDevice = await isPlaybackLeaseOwnedByThisDevice(lease);
+
+      if (!ownedByThisDevice) {
+        usePlayerStore.getState().stopForRemotePlayback();
+      }
+    } catch {
+      // Keep local playback if the lease check cannot reach the backend.
+    }
   },
   syncSongInteractionIds: ({ likedSongIds, votedSongIds }) =>
     set((state) => {
@@ -304,28 +497,39 @@ export const usePlayerStore = create<PlayerState>((set) => ({
       }
 
       if (state.isPlaying) {
-        void pauseSong();
+        pauseSong();
         return { isMiniPlayerHidden: false, isPlaying: false };
       }
 
+      playIntentUntil = Date.now() + 1200;
       void playSong(state.activeSong);
-      return { isMiniPlayerHidden: false, isPlaying: true };
+      return { isLoading: true, isMiniPlayerHidden: false, isPlaying: true };
     }),
-  toggleNormalization: () => set((state) => ({ isNormalizationEnabled: !state.isNormalizationEnabled })),
+  toggleNormalization: () => set((state) => {
+    const nextEnabled = !state.isNormalizationEnabled;
+    syncNativePlayerVolume(state.activeSong, nextEnabled);
+    return { isNormalizationEnabled: nextEnabled };
+  }),
   toggleRepeatMode: () => set((state) => ({ loopMode: state.loopMode === 'off' ? 'queue' : state.loopMode === 'queue' ? 'track' : 'off' })),
-  toggleShuffle: () => set((state) => ({ isShuffleEnabled: !state.isShuffleEnabled })),
+  toggleShuffle: () => set((state) => {
+    const shouldEnableShuffle = !state.isShuffleEnabled;
+
+    if (!shouldEnableShuffle || state.activeIndex < 0 || state.queue.length <= 2) {
+      return { isShuffleEnabled: shouldEnableShuffle };
+    }
+
+    const activeSong = state.queue[state.activeIndex];
+
+    if (!activeSong) {
+      return { isShuffleEnabled: shouldEnableShuffle };
+    }
+
+    const remainingSongs = state.queue.filter((_, index) => index !== state.activeIndex);
+
+    return {
+      activeIndex: 0,
+      isShuffleEnabled: shouldEnableShuffle,
+      queue: [activeSong, ...shuffleSongs(remainingSongs)],
+    };
+  }),
 }));
-
-function getRandomQueueIndex(queueLength: number, activeIndex: number) {
-  if (queueLength <= 1) {
-    return activeIndex;
-  }
-
-  let nextIndex = Math.floor(Math.random() * queueLength);
-
-  if (nextIndex === activeIndex) {
-    nextIndex = (nextIndex + 1) % queueLength;
-  }
-
-  return nextIndex;
-}

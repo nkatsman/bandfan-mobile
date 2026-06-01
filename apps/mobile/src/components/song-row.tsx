@@ -30,7 +30,7 @@ export function SongRow({ likePending = false, onPlay, onToggleLike, onToggleVot
             <Image source={{ uri: getCachedImageSrc(song.coverArtUrl) }} style={styles.artworkImage} />
           ) : (
             <View style={styles.artwork}>
-              <CoverArtPlaceholder height={84} width={84} />
+              <CoverArtPlaceholder height="100%" width="100%" />
             </View>
           )}
         </Pressable>
@@ -96,6 +96,7 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
       borderWidth: 2,
       height: 84,
       justifyContent: 'center',
+      overflow: 'hidden',
       width: 84,
     },
     artworkPressable: {

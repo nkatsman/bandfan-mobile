@@ -24,7 +24,9 @@ import { useMusicStore } from '../state/music-store';
 import { usePlayerStore } from '../state/player-store';
 import { Playlist, Song } from '../types/music';
 import { MoreVerticalIcon } from './ui/more-vertical-icon';
+import { PopupMenu, PopupMenuEmpty, PopupMenuItem } from './ui/popup-menu';
 import { formatLoadingText, useLoadingDots } from './use-loading-dots';
+import { BlockShadow, BlockShadowPressable } from './ui/block-shadow';
 
 type SongTableProps = {
   controlsEnabled?: boolean;
@@ -52,19 +54,22 @@ export type SongTableSortMode = 'best-new' | 'published-desc' | 'published-asc' 
 
 const FILTER_CYCLE: SongTableFilterMode[] = ['all', 'released', 'in-progress', 'demo'];
 const SORT_CYCLE: SongTableSortMode[] = ['best-new', 'published-desc', 'plays-desc', 'votes-desc'];
-const SONG_IDENTITY_BLOCK_HEIGHT = 38;
+const SONG_IDENTITY_BLOCK_HEIGHT = 46;
 const TABLE_INLINE_GAP = 4;
+const PLAY_CELL_LEFT_GAP = 8;
+const PLAY_CELL_SHADOW_OFFSET = 2;
 const MORE_CELL_WIDTH = 40;
 const ROW_SIDE_GAP = 8;
 const SHOW_REPORT_ACTION = false;
 const LIGHT_PLAY_CONTROL_FILL = '#FFFFFF';
 const LIGHT_PLAY_CONTROL_STROKE = '#222222';
-const LIGHT_PLAY_CONTROL_SHADOW = '#000000';
 const DARK_CONTROL_TEXT = '#FFFFFF';
 const DARK_SEARCH_INPUT_FILL = '#1A1A19';
+const LIGHT_SEARCH_PLACEHOLDER = '#5F5F5A';
 const DARK_COVER_ART_BORDER = '#1A1A19';
 const DARK_BORDER_COLOR = '#1A1A19';
 const DARK_VOTE_ICON_COLOR = '#4C79AE';
+const DARK_INACTIVE_ICON_COLOR = '#8F8F8F';
 const THREE_DOT_MENU_Z_INDEX = 3000;
 
 function getNextFilterMode(current: SongTableFilterMode) {
@@ -134,6 +139,8 @@ export function SongTable({
   const styles = useMemo(() => createStyles(theme), [theme]);
   const isDark = theme.mode === 'dark';
   const voteIconColor = isDark ? DARK_VOTE_ICON_COLOR : theme.ui.buttonVoteActive;
+  const inactiveVoteIconColor = isDark ? DARK_INACTIVE_ICON_COLOR : theme.ui.textPrimary;
+  const inactiveLikeIconColor = isDark ? DARK_INACTIVE_ICON_COLOR : theme.ui.textPrimary;
   const addSongToPlaylistLocal = useMusicStore((state) => state.addSongToUserPlaylist);
   const replaceUserPlaylists = useMusicStore((state) => state.replaceUserPlaylists);
   const activeSong = usePlayerStore((state) => state.activeSong);
@@ -196,7 +203,7 @@ export function SongTable({
             <TextInput
               onChangeText={onSearchQueryChange}
               placeholder="Search"
-              placeholderTextColor={theme.ui.textSecondary}
+              placeholderTextColor={isDark ? theme.ui.textSecondary : LIGHT_SEARCH_PLACEHOLDER}
               style={styles.searchInput}
               value={searchQuery}
             />
@@ -265,7 +272,7 @@ export function SongTable({
                   <Image source={{ uri: getCachedImageSrc(song.coverArtUrl) }} style={styles.artworkImage} />
                 ) : (
                   <View style={styles.artworkFallback}>
-                    <CoverArtPlaceholder height={42} width={42} />
+                    <CoverArtPlaceholder height="100%" width="100%" />
                   </View>
                 )}
 
@@ -287,9 +294,9 @@ export function SongTable({
                 accessibilityRole="button"
                 disabled={!onToggleVoteSong || votePending}
                 onPress={() => onToggleVoteSong?.(song)}
-                style={({ pressed }) => [styles.iconCell, styles.voteCell, pressed && styles.pressed, votePending && styles.disabled]}
+                style={({ pressed }) => [styles.iconCell, styles.voteCell, pressed && styles.pressed]}
               >
-                {song.voted ? <TriangleFilledIcon color={voteIconColor} height={20} width={20} /> : <TriangleOutlineIcon color={voteIconColor} height={20} width={20} />}
+                {song.voted ? <TriangleFilledIcon color={voteIconColor} height={20} width={20} /> : <TriangleOutlineIcon color={inactiveVoteIconColor} height={20} width={20} />}
               </Pressable>
             ) : null}
 
@@ -298,14 +305,15 @@ export function SongTable({
                 accessibilityRole="button"
                 disabled={!onToggleLikeSong || likePending}
                 onPress={() => onToggleLikeSong?.(song)}
-                style={({ pressed }) => [styles.iconCell, styles.likeCell, pressed && styles.pressed, likePending && styles.disabled]}
+                style={({ pressed }) => [styles.iconCell, styles.likeCell, pressed && styles.pressed]}
               >
-                {song.liked ? <HeartFilledIcon color={theme.ui.buttonLikeActive} height={22} width={22} /> : <HeartOutlineIcon height={22} width={22} />}
+                {song.liked ? <HeartFilledIcon color={theme.ui.buttonLikeActive} height={22} width={22} /> : <HeartOutlineIcon color={inactiveLikeIconColor} height={22} width={22} />}
               </Pressable>
             ) : null}
 
-            <Pressable
+            <BlockShadowPressable
               accessibilityRole="button"
+              contentStyle={styles.playCell}
               onPress={() => {
                 if (isActiveSong) {
                   togglePlayback();
@@ -314,18 +322,20 @@ export function SongTable({
 
                 onPlaySong(song);
               }}
-              style={({ pressed }) => [styles.playCell, pressed && styles.pressed]}
+              pressedContentStyle={styles.pressed}
+              shadowOffset={PLAY_CELL_SHADOW_OFFSET}
+              style={styles.playCellShadow}
             >
               {isActiveSong && isPlaying ? <PauseIcon color={LIGHT_PLAY_CONTROL_STROKE} height={30} width={30} /> : <PlayIcon color={LIGHT_PLAY_CONTROL_STROKE} height={34} width={34} />}
-            </Pressable>
+            </BlockShadowPressable>
 
             {menuSongId === song.id ? (
-              <View style={styles.rowMenu}>
+              <PopupMenu style={styles.rowMenuShadow}>
                 {menuView === 'playlists' ? (
                   <>
                     <MenuAction icon={<ReturnIcon height={16} width={16} />} label="Go Back" onPress={() => setMenuView('actions')} styles={styles} />
-                    {isPlaylistMenuLoading ? <Text style={styles.rowMenuEmpty}>{formatLoadingText('Loading', playlistLoadingDotCount)}</Text> : null}
-                    {!isPlaylistMenuLoading && userPlaylists.length === 0 ? <Text style={styles.rowMenuEmpty}>No playlists yet.</Text> : null}
+                    {isPlaylistMenuLoading ? <PopupMenuEmpty>{formatLoadingText('Loading', playlistLoadingDotCount)}</PopupMenuEmpty> : null}
+                    {!isPlaylistMenuLoading && userPlaylists.length === 0 ? <PopupMenuEmpty>No playlists yet.</PopupMenuEmpty> : null}
                     {!isPlaylistMenuLoading && userPlaylists.map((playlist) => {
                       const alreadyAdded = playlist.trackIds.includes(song.id);
 
@@ -351,15 +361,15 @@ export function SongTable({
                     {menuContext === 'favorites' ? (
                       <MenuAction icon={<HeartFilledIcon color={theme.ui.buttonLikeActive} height={16} width={16} />} label="Remove from favorites" onPress={() => { onToggleLikeSong?.(song); closeMenu(); }} styles={styles} />
                     ) : (
-                      <MenuAction icon={song.liked ? <HeartFilledIcon color={theme.ui.buttonLikeActive} height={16} width={16} /> : <HeartOutlineIcon height={16} width={16} />} label={song.liked ? 'Remove from favorites' : 'Add to favorites'} onPress={() => { onToggleLikeSong?.(song); closeMenu(); }} styles={styles} />
+                      <MenuAction icon={song.liked ? <HeartFilledIcon color={theme.ui.buttonLikeActive} height={16} width={16} /> : <HeartOutlineIcon color={inactiveLikeIconColor} height={16} width={16} />} label={song.liked ? 'Remove from favorites' : 'Add to favorites'} onPress={() => { onToggleLikeSong?.(song); closeMenu(); }} styles={styles} />
                     )}
                     {menuContext !== 'voted' ? (
-                      <MenuAction icon={song.voted ? <TriangleFilledIcon color={voteIconColor} height={16} width={16} /> : <TriangleOutlineIcon color={voteIconColor} height={16} width={16} />} label={song.voted ? 'Unvote' : 'Vote for release'} onPress={() => { onToggleVoteSong?.(song); closeMenu(); }} styles={styles} />
+                      <MenuAction icon={song.voted ? <TriangleFilledIcon color={voteIconColor} height={16} width={16} /> : <TriangleOutlineIcon color={inactiveVoteIconColor} height={16} width={16} />} label={song.voted ? 'Unvote' : 'Vote for release'} onPress={() => { onToggleVoteSong?.(song); closeMenu(); }} styles={styles} />
                     ) : null}
                     {SHOW_REPORT_ACTION ? <MenuAction icon={<FileTextIcon height={16} width={16} />} label="Report song" onPress={() => { closeMenu(); }} styles={styles} /> : null}
                   </>
                 )}
-              </View>
+              </PopupMenu>
             ) : null}
           </View>
         );
@@ -368,29 +378,24 @@ export function SongTable({
       <Modal animationType="fade" onRequestClose={() => setStatusInfo(null)} transparent visible={Boolean(statusInfo)}>
         <View style={styles.statusModalRoot}>
           <Pressable accessibilityRole="button" onPress={() => setStatusInfo(null)} style={styles.statusModalBackdrop} />
-          <View style={styles.statusModalPanel}>
+          <BlockShadow contentStyle={styles.statusModalPanel} shadowOffset={4} style={styles.statusModalPanelShadow}>
             <Text style={styles.statusModalTitle}>{statusInfo?.label}</Text>
             <Text style={styles.statusModalText}>{statusInfo?.description}</Text>
-          </View>
+          </BlockShadow>
         </View>
       </Modal>
     </View>
   );
 }
 
-function MenuAction({ disabled = false, icon, label, onPress, styles }: { disabled?: boolean; icon: ReactNode; label: string; onPress: () => void; styles: ReturnType<typeof createStyles> }) {
-  return (
-    <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.rowMenuAction, pressed && !disabled && styles.pressed, disabled && styles.disabled]}>
-      {icon}
-      <Text numberOfLines={1} style={styles.rowMenuActionLabel}>{label}</Text>
-    </Pressable>
-  );
+function MenuAction({ disabled = false, icon, label, onPress }: { disabled?: boolean; icon?: ReactNode; label: string; onPress: () => void; styles: ReturnType<typeof createStyles> }) {
+  return <PopupMenuItem disabled={disabled} icon={icon} label={label} onPress={onPress} />;
 }
 
 function HoldToMarqueeText({ containerStyle, text, textStyle }: { containerStyle?: object; text: string; textStyle: object }) {
   const [containerWidth, setContainerWidth] = useState(0);
-  const estimatedTextWidth = text.length * 8.5;
-  const overflowWidth = containerWidth > 0 ? Math.max(0, estimatedTextWidth - containerWidth) : 0;
+  const [textWidth, setTextWidth] = useState(0);
+  const overflowWidth = containerWidth > 0 && textWidth > 0 ? Math.max(0, textWidth - containerWidth) : 0;
   const translateX = useRef(new Animated.Value(0)).current;
   const loopRef = useRef<Animated.CompositeAnimation | null>(null);
 
@@ -428,6 +433,7 @@ function HoldToMarqueeText({ containerStyle, text, textStyle }: { containerStyle
 
   return (
     <View style={[sharedStyles.marqueePressArea, containerStyle]}>
+      <Text accessible={false} onLayout={(event) => setTextWidth(event.nativeEvent.layout.width)} style={[textStyle, sharedStyles.marqueeMeasure]}>{text}</Text>
       <View onLayout={(event) => setContainerWidth(event.nativeEvent.layout.width)} style={sharedStyles.marqueeViewport}>
         <Animated.Text numberOfLines={1} style={[textStyle, sharedStyles.marqueeText, { transform: [{ translateX }] }]}> 
           {text}
@@ -444,6 +450,10 @@ const sharedStyles = StyleSheet.create({
   },
   marqueeText: {
     flexShrink: 0,
+  },
+  marqueeMeasure: {
+    opacity: 0,
+    position: 'absolute',
   },
   marqueeViewport: {
     minWidth: 0,
@@ -464,6 +474,7 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
       borderWidth: 2,
       height: SONG_IDENTITY_BLOCK_HEIGHT,
       justifyContent: 'center',
+      overflow: 'hidden',
       width: SONG_IDENTITY_BLOCK_HEIGHT,
     },
     artworkImage: {
@@ -534,13 +545,16 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
     playCell: {
       alignItems: 'center',
       backgroundColor: LIGHT_PLAY_CONTROL_FILL,
-      borderWidth: 0,
-      boxShadow: `inset 0 0 0 ${DS.stroke.fine}px ${LIGHT_PLAY_CONTROL_STROKE}, 2px 2px 0px ${LIGHT_PLAY_CONTROL_SHADOW}`,
+      borderColor: LIGHT_PLAY_CONTROL_STROKE,
+      borderWidth: DS.stroke.fine,
       height: 44,
       justifyContent: 'center',
-      marginLeft: TABLE_INLINE_GAP,
       overflow: 'hidden',
       width: 44,
+    },
+    playCellShadow: {
+      marginLeft: PLAY_CELL_LEFT_GAP,
+      marginRight: TABLE_INLINE_GAP + PLAY_CELL_SHADOW_OFFSET,
     },
     moreCell: {
       alignItems: 'center',
@@ -553,7 +567,6 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
       width: MORE_CELL_WIDTH,
     },
     pressed: {
-      boxShadow: [],
       transform: [{ translateX: 1 }, { translateY: 1 }],
     },
     row: {
@@ -577,10 +590,11 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
       backgroundColor: ui.surfaceCard,
       borderColor: isDark ? DARK_BORDER_COLOR : ui.borderStrong,
       borderWidth: 2,
-      boxShadow: '4px 4px 0px #000000',
+    },
+    rowMenuShadow: {
+      left: ROW_SIDE_GAP + 2,
       minWidth: 196,
       position: 'absolute',
-      left: ROW_SIDE_GAP + 2,
       top: 46,
       zIndex: THREE_DOT_MENU_Z_INDEX,
     },
@@ -645,7 +659,7 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
       flex: 1,
       flexDirection: 'row',
       gap: TABLE_INLINE_GAP,
-      marginRight: 0,
+      marginRight: TABLE_INLINE_GAP,
       minWidth: 0,
     },
     songPressContent: {
@@ -670,7 +684,8 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
       width: 32,
     },
     playHeader: {
-      marginLeft: TABLE_INLINE_GAP,
+      marginLeft: PLAY_CELL_LEFT_GAP,
+      marginRight: TABLE_INLINE_GAP,
       textAlign: 'center',
       width: 44,
     },
@@ -729,11 +744,11 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
       position: 'relative',
     },
     menuDismissLayer: {
-      bottom: 0,
-      left: 0,
+      bottom: -1000,
+      left: -1000,
       position: 'absolute',
-      right: 0,
-      top: 0,
+      right: -1000,
+      top: -1000,
       zIndex: THREE_DOT_MENU_Z_INDEX - 1,
     },
     statusModalRoot: {
@@ -757,12 +772,10 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
       backgroundColor: ui.surfaceCard,
       borderColor: ui.borderStrong,
       borderWidth: 3,
-      maxWidth: 320,
       padding: spacing.lg,
-      shadowColor: '#000000',
-      shadowOffset: { width: 4, height: 4 },
-      shadowOpacity: 1,
-      shadowRadius: 0,
+    },
+    statusModalPanelShadow: {
+      maxWidth: 320,
       width: '82%',
     },
     statusModalTitle: {

@@ -1,8 +1,8 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { type Href, useRouter } from 'expo-router';
 import { useEffect, useMemo } from 'react';
-import { BackHandler, PanResponder, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { BackHandler, Modal, PanResponder, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import LogoDark from '../../assets/BandFan/BandFan - Logo Dark.svg';
 import LogoLight from '../../assets/BandFan/BandFan - Logo Light.svg';
@@ -13,13 +13,18 @@ import FolderMusicIcon from '../../assets/Icons/folder-music-fill.svg';
 import HeartIcon from '../../assets/Icons/poker-hearts-fill.svg';
 import SunIcon from '../../assets/Icons/sun-line.svg';
 import TriangleIcon from '../../assets/Icons/triangle-fill.svg';
+import { DEBUG_THUMB_ZONES_HAND, DEBUG_THUMB_ZONES_OPACITY } from '../config/debug-mode';
 import { radii, spacing, typeScale } from '../design/tokens';
 import { useAppTheme } from '../design/theme';
 import { accountProfileQueryDefaults, fetchAccountProfile } from '../features/account/account-api';
 import { signOutCurrentSession } from '../features/auth/auth-service';
+import { useDebugStore } from '../state/debug-store';
 import { useSessionStore } from '../state/session-store';
+import { useMainMenuStore } from '../state/main-menu-store';
 import { useThemeStore } from '../state/theme-store';
 import { LOGO_BUTTON_SHADOW_SIZE, LOGO_BUTTON_SIZE } from './screen-header';
+import { ThemeColorDebugOverlayStatic, ThumbZoneDebugOverlayStatic } from './thumb-zone-debug-overlay';
+import { BlockShadow, BlockShadowPressable } from './ui/block-shadow';
 
 const menuItems = [
   { icon: CompassIcon, key: 'discover', label: 'Discover', route: '/(tabs)' as Href },
@@ -30,9 +35,9 @@ const menuItems = [
 
 const PANEL_SHADOW_SIZE = 5;
 const BOTTOM_MENU_AREA_HEIGHT = 90;
-const MAIN_MENU_TOP_GAP = spacing.sm;
+const MAIN_MENU_TOP_GAP = spacing.xs;
 const MAIN_MENU_TO_CONTENT_GAP = spacing.xs;
-const MENU_BUTTON_BOTTOM_OFFSET = MAIN_MENU_TOP_GAP + LOGO_BUTTON_SIZE + LOGO_BUTTON_SHADOW_SIZE + MAIN_MENU_TO_CONTENT_GAP;
+const MIN_PANEL_HEIGHT = 440;
 const MENU_ACTION_GREEN = '#6EA06E';
 const SIDEBAR_BUTTON_FILL = '#333333';
 const SIDEBAR_BUTTON_TEXT = '#FFFFFF';
@@ -50,10 +55,15 @@ type AppSidebarProps = {
 export function AppSidebar({ onClose, visible }: AppSidebarProps) {
   const router = useRouter();
   const { height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const theme = useAppTheme();
+  const debugModeEnabled = useDebugStore((state) => state.debugModeEnabled);
+  const colorOverlayMode = useDebugStore((state) => state.colorOverlayMode);
+  const thumbOverlayVisible = useDebugStore((state) => state.thumbOverlayVisible);
   const mode = useThemeStore((state) => state.mode);
   const toggleMode = useThemeStore((state) => state.toggleMode);
   const session = useSessionStore((state) => state.user);
+  const setMainMenuVisible = useMainMenuStore((state) => state.setMainMenuVisible);
   const styles = useMemo(() => createStyles(theme), [theme]);
   const profileQuery = useQuery({
     ...accountProfileQueryDefaults,
@@ -76,7 +86,13 @@ export function AppSidebar({ onClose, visible }: AppSidebarProps) {
   const ThemeIcon = mode === 'dark' ? SunIcon : ContrastIcon;
   const themeToggleLabel = mode === 'dark' ? 'Switch to light theme' : 'Switch to dark theme';
   const menuAccent = mode === 'light' ? theme.palette.blueDark : MENU_ACTION_GREEN;
-  const panelMaxHeight = Math.max(440, height - MENU_BUTTON_BOTTOM_OFFSET - BOTTOM_MENU_AREA_HEIGHT - spacing.sm - (spacing.sm + PANEL_SHADOW_SIZE) - PANEL_SHADOW_SIZE);
+  const menuRows = [[menuItems[0], menuItems[1]], [menuItems[2], menuItems[3]]];
+  const anchorTop = insets.top + MAIN_MENU_TOP_GAP + LOGO_BUTTON_SIZE + LOGO_BUTTON_SHADOW_SIZE + MAIN_MENU_TO_CONTENT_GAP + insets.top;
+  const bottomReserve = insets.bottom + BOTTOM_MENU_AREA_HEIGHT + spacing.sm + PANEL_SHADOW_SIZE;
+  const panelTop = height - anchorTop - bottomReserve >= MIN_PANEL_HEIGHT
+    ? anchorTop
+    : Math.max(spacing.sm, height - MIN_PANEL_HEIGHT - bottomReserve);
+  const panelMaxHeight = Math.max(320, height - panelTop - bottomReserve);
   const panResponder = useMemo(
     () => PanResponder.create({
       onMoveShouldSetPanResponder: (_, gestureState) => gestureState.dx < -16 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy),
@@ -88,6 +104,12 @@ export function AppSidebar({ onClose, visible }: AppSidebarProps) {
     }),
     [onClose],
   );
+
+  useEffect(() => {
+    setMainMenuVisible(visible);
+
+    return () => setMainMenuVisible(false);
+  }, [setMainMenuVisible, visible]);
 
   useEffect(() => {
     if (!visible) {
@@ -129,66 +151,74 @@ export function AppSidebar({ onClose, visible }: AppSidebarProps) {
   }
 
   return (
-    <View style={styles.root}>
-      <Pressable accessibilityRole="button" onPress={onClose} style={styles.backdrop} />
-      <SafeAreaView edges={[ 'top', 'bottom' ]} pointerEvents="box-none" style={styles.panelWrap}>
-        <View style={[styles.panel, { maxHeight: panelMaxHeight }]} {...panResponder.panHandlers}> 
-          <View style={styles.menuSection}>
-            <View style={styles.logoRow}>
-              <Pressable accessibilityLabel={themeToggleLabel} accessibilityRole="button" onPress={toggleMode} style={styles.logoButton}>
-                <Logo height={112} width={278} />
-                <View style={styles.themeIconSlot}>
-                  <ThemeIcon color={theme.ui.textPrimary} height={19} width={19} />
-                </View>
-              </Pressable>
-            </View>
-
-            <View style={styles.menuGrid}>
-              {menuItems.map((item) => {
-                const Icon = item.icon;
-
-                return (
-                  <Pressable key={item.key} accessibilityRole="button" onPress={() => navigate(item.route)} style={({ pressed }) => [styles.menuButton, pressed && styles.pressed]}>
-                    <Icon color={getMenuIconColor(item.key)} height={24} width={24} />
-                    <Text style={styles.menuLabel}>{item.label}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-
-          <View style={styles.footer}>
-            <View style={styles.accountBlock}>
-              <View style={styles.accountInfoRows}>
-                <View>
-                  <Text style={styles.accountFieldLabel}>Name</Text>
-                  <Text numberOfLines={1} style={styles.accountName}>{displayName}</Text>
-                </View>
-                {username ? (
-                  <View>
-                    <Text style={styles.accountFieldLabel}>Username</Text>
-                    <Text numberOfLines={1} style={styles.accountMeta}>@{username}</Text>
+    <Modal animationType="none" onRequestClose={onClose} transparent visible={visible}>
+      <View style={styles.root}>
+        <Pressable accessibilityRole="button" onPress={onClose} style={styles.backdrop} />
+        <View pointerEvents="box-none" style={[styles.panelWrap, { paddingTop: panelTop, paddingBottom: bottomReserve }]}>
+          <BlockShadow contentStyle={styles.panel} shadowOffset={6} style={[styles.panelShadow, { maxHeight: panelMaxHeight }]} {...panResponder.panHandlers}> 
+            <View style={styles.menuSection}>
+              <View style={styles.logoRow}>
+                <Pressable accessibilityLabel={themeToggleLabel} accessibilityRole="button" onPress={toggleMode} style={styles.logoButton}>
+                  <Logo height={112} width={278} />
+                  <View style={styles.themeIconSlot}>
+                    <ThemeIcon color={theme.ui.textPrimary} height={19} width={19} />
                   </View>
-                ) : null}
-                {email ? (
-                  <View>
-                    <Text style={styles.accountFieldLabel}>Email</Text>
-                    <Text numberOfLines={1} style={styles.accountMeta}>{email}</Text>
-                  </View>
-                ) : null}
+                </Pressable>
               </View>
-              <Pressable accessibilityRole="button" onPress={() => navigate('/(tabs)/account' as Href)} style={({ pressed }) => [styles.accountButton, pressed && styles.pressed]}>
-                <AccountIcon color={menuAccent} height={22} width={22} />
-                <Text style={styles.accountButtonLabel}>Account</Text>
-              </Pressable>
+
+              <View style={styles.menuGrid}>
+                {menuRows.map((row, rowIndex) => (
+                  <View key={row.map((item) => item.key).join('-')} style={[styles.menuRow, rowIndex === 0 && styles.menuRowGap]}>
+                    {row.map((item, itemIndex) => {
+                      const Icon = item.icon;
+
+                      return (
+                        <BlockShadowPressable key={item.key} accessibilityRole="button" contentStyle={styles.menuButton} onPress={() => navigate(item.route)} pressedContentStyle={styles.pressed} shadowOffset={4} style={[styles.menuButtonShadow, itemIndex === 0 && styles.menuButtonShadowFirst]}>
+                          <Icon color={getMenuIconColor(item.key)} height={24} width={24} />
+                          <Text style={styles.menuLabel}>{item.label}</Text>
+                        </BlockShadowPressable>
+                      );
+                    })}
+                  </View>
+                ))}
+              </View>
             </View>
-            <Pressable accessibilityRole="button" disabled={signOutMutation.isPending} onPress={() => signOutMutation.mutate()} style={({ pressed }) => [styles.signOutButton, pressed && styles.pressed, signOutMutation.isPending && styles.disabled]}>
-              <Text style={styles.signOutLabel}>Sign Out</Text>
-            </Pressable>
-          </View>
+
+            <View style={styles.footer}>
+              <View style={styles.accountBlock}>
+                <View style={styles.accountInfoRows}>
+                  <View>
+                    <Text style={styles.accountFieldLabel}>Name</Text>
+                    <Text numberOfLines={1} style={styles.accountName}>{displayName}</Text>
+                  </View>
+                  {username ? (
+                    <View>
+                      <Text style={styles.accountFieldLabel}>Username</Text>
+                      <Text numberOfLines={1} style={styles.accountMeta}>@{username}</Text>
+                    </View>
+                  ) : null}
+                  {email ? (
+                    <View>
+                      <Text style={styles.accountFieldLabel}>Email</Text>
+                      <Text numberOfLines={1} style={styles.accountMeta}>{email}</Text>
+                    </View>
+                  ) : null}
+                </View>
+                <BlockShadowPressable accessibilityRole="button" contentStyle={styles.accountButton} onPress={() => navigate('/(tabs)/account' as Href)} pressedContentStyle={styles.pressed} shadowOffset={4}>
+                  <AccountIcon color={menuAccent} height={22} width={22} />
+                  <Text style={styles.accountButtonLabel}>Account</Text>
+                </BlockShadowPressable>
+              </View>
+              <BlockShadowPressable accessibilityRole="button" contentStyle={[styles.signOutButton, signOutMutation.isPending && styles.disabled]} disabled={signOutMutation.isPending} onPress={() => signOutMutation.mutate()} pressedContentStyle={styles.pressed} shadowOffset={4} shadowVisible={!signOutMutation.isPending} style={styles.signOutButtonShadow}>
+                <Text style={styles.signOutLabel}>Sign Out</Text>
+              </BlockShadowPressable>
+            </View>
+          </BlockShadow>
         </View>
-      </SafeAreaView>
       </View>
+      {debugModeEnabled && thumbOverlayVisible ? <ThumbZoneDebugOverlayStatic hand={DEBUG_THUMB_ZONES_HAND} opacity={DEBUG_THUMB_ZONES_OPACITY} /> : null}
+      {debugModeEnabled && colorOverlayMode !== 'off' ? <ThemeColorDebugOverlayStatic side={colorOverlayMode} /> : null}
+    </Modal>
   );
 }
 
@@ -212,7 +242,6 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
       backgroundColor: menuButtonFill,
       borderColor: buttonBorder,
       borderWidth: 2,
-      boxShadow: '4px 4px 0px #000000',
       flexDirection: 'row',
       gap: spacing.sm,
       justifyContent: 'center',
@@ -284,18 +313,27 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
       backgroundColor: menuButtonFill,
       borderColor: buttonBorder,
       borderWidth: 2,
-      boxShadow: '4px 4px 0px #000000',
-      flexBasis: '48%',
       flexDirection: 'row',
-      flexGrow: 1,
       gap: spacing.sm,
+      justifyContent: 'center',
       minHeight: 54,
       paddingHorizontal: spacing.md,
     },
+    menuButtonShadow: {
+      flex: 1,
+    },
+    menuButtonShadowFirst: {
+      marginRight: spacing.sm,
+    },
     menuGrid: {
+      alignSelf: 'stretch',
+    },
+    menuRow: {
+      alignSelf: 'stretch',
       flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: spacing.sm,
+    },
+    menuRowGap: {
+      marginBottom: spacing.sm,
     },
     menuSection: {
       gap: 0,
@@ -313,20 +351,19 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
       borderColor: buttonBorder,
       borderRadius: radii.md,
       borderWidth: 3,
-      boxShadow: '6px 6px 0px #000000',
       gap: spacing.md,
       padding: spacing.lg,
+      width: '100%',
+    },
+    panelShadow: {
       width: '100%',
     },
     panelWrap: {
       flex: 1,
       justifyContent: 'flex-start',
-      paddingBottom: BOTTOM_MENU_AREA_HEIGHT + spacing.sm,
       paddingHorizontal: spacing.sm,
-      paddingTop: MENU_BUTTON_BOTTOM_OFFSET,
     },
     pressed: {
-      boxShadow: [],
       transform: [{ translateX: 1 }, { translateY: 1 }],
     },
     root: {
@@ -339,10 +376,12 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
       backgroundColor: colors.buttonDanger,
       borderColor: buttonBorder,
       borderWidth: 2,
-      boxShadow: '4px 4px 0px #000000',
       justifyContent: 'center',
-      marginBottom: spacing.lg,
       minHeight: 54,
+    },
+    signOutButtonShadow: {
+      alignSelf: 'stretch',
+      marginBottom: spacing.lg,
     },
     signOutLabel: {
       color: SIDEBAR_DANGER_TEXT,

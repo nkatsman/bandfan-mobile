@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { AppBackgroundPattern } from '../../components/app-background-pattern';
 import { AppSidebar } from '../../components/app-sidebar';
 import { DiscoveryControlsBar } from '../../components/discovery/discovery-controls-bar';
 import { MusicPreferenceControls } from '../../components/music-preference-controls';
@@ -22,6 +23,8 @@ import { usePlayerStore } from '../../state/player-store';
 import { discoverySongsQueryDefaults, discoverySongsQueryKey, fetchDiscoverySongs } from '../discovery/discovery-api';
 
 const SEARCH_FILTER_SORT_Z_INDEX = 4000;
+const SONG_REACH_OFFSET = 48;
+const HEADER_CENTER_OFFSET = 24;
 
 export function LikedScreen() {
   const theme = useAppTheme();
@@ -78,6 +81,7 @@ export function LikedScreen() {
 
   return (
     <View style={styles.root}>
+      <AppBackgroundPattern />
       <ScrollView
         {...pullToRefreshProps}
         contentContainerStyle={styles.content}
@@ -85,9 +89,11 @@ export function LikedScreen() {
         style={styles.scrollArea}
       >
         {refreshIndicator}
-        <ScreenHeader counter={isFavoritesLoading ? formatLoadingText('Loading', loadingDotCount) : `${viewSongs.length} favorite songs`} onLogoPress={() => setSidebarVisible(true)} title="Favorites">
-          <MusicPreferenceControls />
-        </ScreenHeader>
+        <ScreenHeader counter={isFavoritesLoading ? formatLoadingText('Loading', loadingDotCount) : `${viewSongs.length} favorite songs`} onLogoPress={() => setSidebarVisible(true)} title="Favorites" verticalOffset={HEADER_CENTER_OFFSET} />
+
+        <View style={styles.musicControlsShelf}>
+          <MusicPreferenceControls layout="fill" showNormalization={false} />
+        </View>
 
         {likeErrorMessage ? (
           <>
@@ -162,6 +168,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
     },
     scrollArea: {
       flex: 1,
+      position: 'relative',
+      zIndex: 1,
     },
     bottomControlsDock: {
       backgroundColor: colors.appBackground,
@@ -171,6 +179,15 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
     content: {
       paddingBottom: spacing.sm,
       paddingTop: spacing.sm,
+    },
+    musicControlsShelf: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.xs,
+      marginTop: SONG_REACH_OFFSET - HEADER_CENTER_OFFSET,
+      paddingBottom: spacing.xs,
+      paddingHorizontal: spacing.sm,
+      paddingTop: spacing.xs,
     },
     sectionTitle: {
       color: colors.textPrimary,

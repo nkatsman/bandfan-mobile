@@ -11,8 +11,11 @@ import PencilIcon from '../../../assets/Icons/pencil-line.svg';
 import PinIcon from '../../../assets/Icons/pin-line.svg';
 import TrashIcon from '../../../assets/Icons/trash-2-line.svg';
 import TriangleFilledIcon from '../../../assets/Icons/triangle-fill.svg';
+import { AppBackgroundPattern } from '../../components/app-background-pattern';
 import { AppSidebar } from '../../components/app-sidebar';
 import { ScreenHeader } from '../../components/screen-header';
+import { BlockShadow, BlockShadowPressable } from '../../components/ui/block-shadow';
+import { PopupMenu, PopupMenuItem } from '../../components/ui/popup-menu';
 import { usePullToRefresh } from '../../components/use-pull-to-refresh';
 import { DS } from '../../design/ds';
 import { spacing, typeScale } from '../../design/tokens';
@@ -37,6 +40,8 @@ const STATUS_FOREGROUND = '#222222';
 const STATUS_PRIVATE_FOREGROUND = '#FFF9EF';
 const DARK_VOTE_ICON_COLOR = '#4C79AE';
 const DARK_PLACEHOLDER_COVER_FILL = '#333333';
+const PLAYLISTS_REACH_OFFSET = 48;
+const HEADER_CENTER_OFFSET = 24;
 
 export function PlaylistsScreen() {
   const router = useRouter();
@@ -164,15 +169,16 @@ export function PlaylistsScreen() {
 
   return (
     <View style={styles.root}>
+      <AppBackgroundPattern />
       <ScrollView
         {...pullToRefreshProps}
         contentContainerStyle={styles.content}
-        onTouchStart={activeMenuId ? () => setActiveMenuId(null) : undefined}
         showsVerticalScrollIndicator={false}
         style={styles.scrollArea}
       >
         {refreshIndicator}
-        <ScreenHeader counter={`${playlists.length} playlists`} onLogoPress={() => setSidebarVisible(true)} title="Playlists" />
+        <ScreenHeader counter={`${playlists.length} playlists`} onLogoPress={() => setSidebarVisible(true)} title="Playlists" verticalOffset={HEADER_CENTER_OFFSET} />
+        <View style={styles.reachSpacer} />
 
         <View style={styles.grid}>
           {favoritesPlaylist ? <PlaylistCard displayTrackCount={likedSongIds.length} onOpen={() => openPlaylist(favoritesPlaylist)} playlist={favoritesPlaylist} songs={songs} styles={styles} /> : null}
@@ -238,13 +244,14 @@ export function PlaylistsScreen() {
             </View>
           ) : null}
 
-          {activeMenuId ? <Pressable accessibilityRole="button" onPress={() => setActiveMenuId(null)} style={styles.menuDismissFiller} /> : null}
         </View>
       </ScrollView>
 
+      {activeMenuId ? <Pressable accessibilityLabel="Close playlist menu" accessibilityRole="button" onPress={() => setActiveMenuId(null)} style={styles.menuDismissLayer} /> : null}
+
       <Modal animationType="fade" onRequestClose={() => setEditingPlaylist(null)} transparent visible={Boolean(editingPlaylist)}>
         <View style={styles.modalBackdrop}>
-          <View style={styles.editPanel}>
+          <BlockShadow contentStyle={styles.editPanel} shadowOffset={4} style={styles.editPanelShadow}>
             <Text style={styles.editTitle}>Edit Playlist</Text>
             <TextInput
               onChangeText={setEditTitle}
@@ -262,19 +269,22 @@ export function PlaylistsScreen() {
               value={editDescription}
             />
             <View style={styles.editActionsRow}>
-              <Pressable accessibilityRole="button" onPress={() => setEditingPlaylist(null)} style={({ pressed }) => [styles.editButton, pressed && styles.itemPressed]}>
+              <BlockShadowPressable accessibilityRole="button" contentStyle={styles.editButton} onPress={() => setEditingPlaylist(null)} pressedContentStyle={styles.itemPressed} shadowOffset={2}>
                 <Text style={styles.editButtonLabel}>Cancel</Text>
-              </Pressable>
-              <Pressable
+              </BlockShadowPressable>
+              <BlockShadowPressable
                 accessibilityRole="button"
+                contentStyle={[styles.editButton, styles.editSaveButton, editMutation.isPending && styles.disabled]}
                 disabled={editMutation.isPending}
                 onPress={submitEdit}
-                style={({ pressed }) => [styles.editButton, styles.editSaveButton, pressed && styles.itemPressed, editMutation.isPending && styles.disabled]}
+                pressedContentStyle={styles.itemPressed}
+                shadowOffset={2}
+                shadowVisible={!editMutation.isPending}
               >
                 <Text style={styles.editButtonLabel}>Save</Text>
-              </Pressable>
+              </BlockShadowPressable>
             </View>
-          </View>
+          </BlockShadow>
         </View>
       </Modal>
       <AppSidebar onClose={() => setSidebarVisible(false)} visible={sidebarVisible} />
@@ -319,10 +329,13 @@ function PlaylistCard({
   const voteIconColor = styles.voteIconColor.color;
 
   return (
-    <Pressable
+    <BlockShadowPressable
       onPress={onOpen}
       onLongPress={playlist.kind === 'user' ? onToggleMenu : undefined}
-      style={({ pressed }) => [styles.card, menuOpen && styles.cardMenuOpen, pressed && styles.itemPressed]}
+      contentStyle={styles.card}
+      pressedContentStyle={styles.itemPressed}
+      shadowOffset={2}
+      style={menuOpen && styles.cardMenuOpen}
     >
       {playlist.kind === 'favorites' ? (
         <View style={styles.builtInCoverFallback}>
@@ -340,7 +353,7 @@ function PlaylistCard({
         </View>
       ) : (
         <View style={styles.coverFallback}>
-          <CoverArtPlaceholder height={76} width={76} />
+          <CoverArtPlaceholder height="100%" width="100%" />
         </View>
       )}
 
@@ -360,7 +373,7 @@ function PlaylistCard({
       </View>
 
       {menuOpen && playlist.kind === 'user' ? (
-        <View onTouchStart={(event) => event.stopPropagation()} style={styles.cardMenu}>
+        <PopupMenu style={styles.cardMenuShadow}>
           <PlaylistMenuAction
             icon={playlist.visibility === 'public'
               ? <EyeOffIcon color={styles.iconColor.color} height={16} width={16} />
@@ -372,9 +385,9 @@ function PlaylistCard({
           <PlaylistMenuAction icon={<PencilIcon color={styles.iconColor.color} height={16} width={16} />} label="Edit" onPress={onEdit} styles={styles} />
           <PlaylistMenuAction icon={<PinIcon color={styles.iconColor.color} height={16} width={16} />} label={playlist.isPinned ? 'Unpin' : 'Pin'} onPress={onTogglePin} styles={styles} />
           <PlaylistMenuAction destructive icon={<TrashIcon color={styles.deleteIconColor.color} height={16} width={16} />} label="Delete" onPress={onDelete} styles={styles} />
-        </View>
+        </PopupMenu>
       ) : null}
-    </Pressable>
+    </BlockShadowPressable>
   );
 }
 
@@ -391,12 +404,7 @@ function PlaylistMenuAction({
   onPress?: () => void;
   styles: ReturnType<typeof createStyles>;
 }) {
-  return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.cardMenuAction, pressed && styles.itemPressed]}>
-      {icon}
-      <Text style={[styles.cardMenuActionLabel, destructive && styles.cardMenuActionLabelDestructive]}>{label}</Text>
-    </Pressable>
-  );
+  return <PopupMenuItem destructive={destructive} icon={icon} label={label} onPress={onPress ?? (() => undefined)} />;
 }
 
 function createStyles(theme: ReturnType<typeof useAppTheme>) {
@@ -412,6 +420,11 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
     },
     scrollArea: {
       flex: 1,
+      position: 'relative',
+      zIndex: 1,
+    },
+    reachSpacer: {
+      height: PLAYLISTS_REACH_OFFSET - HEADER_CENTER_OFFSET,
     },
     content: {
       paddingBottom: 196,
@@ -431,10 +444,13 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
     sectionBlockMenuOpen: {
       zIndex: 2000,
     },
-    menuDismissFiller: {
-      minHeight: 420,
-      width: '100%',
-      zIndex: 500,
+    menuDismissLayer: {
+      bottom: 0,
+      left: 0,
+      position: 'absolute',
+      right: 0,
+      top: 0,
+      zIndex: 1500,
     },
     divider: {
       backgroundColor: colors.borderStrong,
@@ -463,10 +479,6 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
       gap: spacing.sm,
       minHeight: 104,
       padding: spacing.sm,
-      shadowColor: '#000000',
-      shadowOffset: { width: 2, height: 2 },
-      shadowOpacity: 1,
-      shadowRadius: 0,
       position: 'relative',
       zIndex: 1,
     },
@@ -474,7 +486,6 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
       zIndex: 1000,
     },
     itemPressed: {
-      shadowOpacity: 0,
       transform: [{ translateX: 1 }, { translateY: 1 }],
     },
     coverFallback: {
@@ -484,6 +495,7 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
       borderWidth: 2,
       height: 80,
       justifyContent: 'center',
+      overflow: 'hidden',
       width: 80,
     },
     builtInCoverFallback: {
@@ -581,13 +593,11 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
       backgroundColor: colors.surfaceCard,
       borderColor: darkBorder,
       borderWidth: 2,
+    },
+    cardMenuShadow: {
       minWidth: 172,
       position: 'absolute',
       right: spacing.sm,
-      shadowColor: '#000000',
-      shadowOffset: { width: 2, height: 2 },
-      shadowOpacity: 1,
-      shadowRadius: 0,
       top: 56,
       zIndex: 1001,
     },
@@ -630,10 +640,6 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
       minHeight: 42,
       minWidth: 92,
       paddingHorizontal: spacing.sm,
-      shadowColor: '#000000',
-      shadowOffset: { width: 2, height: 2 },
-      shadowOpacity: 1,
-      shadowRadius: 0,
     },
     editButtonLabel: {
       color: colors.textPrimary,
@@ -659,10 +665,8 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
       borderWidth: 3,
       gap: spacing.sm,
       padding: spacing.sm,
-      shadowColor: '#000000',
-      shadowOffset: { width: 4, height: 4 },
-      shadowOpacity: 1,
-      shadowRadius: 0,
+    },
+    editPanelShadow: {
       width: '92%',
     },
     editSaveButton: {

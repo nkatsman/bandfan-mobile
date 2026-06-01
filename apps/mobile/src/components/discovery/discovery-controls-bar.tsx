@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 
@@ -8,6 +8,8 @@ import { DS } from '../../design/ds';
 import { spacing, typeScale } from '../../design/tokens';
 import { useAppTheme } from '../../design/theme';
 import type { SongTableFilterMode, SongTableSortMode } from '../song-table';
+import { BlockShadowPressable } from '../ui/block-shadow';
+import { PopupMenu, PopupMenuItem } from '../ui/popup-menu';
 
 type DiscoveryControlsBarProps = {
   availableSortModes?: SongTableSortMode[];
@@ -26,6 +28,7 @@ const DARK_SEARCH_INPUT_FILL = '#1A1A19';
 const DARK_CONTROL_TEXT = '#FFFFFF';
 const DARK_CONTROL_ICON = '#6EA06E';
 const LIGHT_CONTROL_ICON = '#4C79AE';
+const LIGHT_SEARCH_PLACEHOLDER = '#5F5F5A';
 const SEARCH_FILTER_SORT_Z_INDEX = 4000;
 const THREE_DOT_MENU_Z_INDEX = 3000;
 
@@ -159,6 +162,19 @@ function toggleSortMode(currentMode: SongTableSortMode, selectedMode: SongTableS
   return `${getSortBase(selectedMode)}-${getSortDirection(currentMode) === 'desc' ? 'asc' : 'desc'}` as SongTableSortMode;
 }
 
+function getNextFilterMode(currentMode: SongTableFilterMode) {
+  const currentIndex = FILTER_OPTIONS.indexOf(currentMode);
+  return FILTER_OPTIONS[(currentIndex + 1) % FILTER_OPTIONS.length] ?? 'all';
+}
+
+function getNextSortMode(currentMode: SongTableSortMode, availableSortModes: SongTableSortMode[]) {
+  const currentBase = getSortBase(currentMode);
+  const currentIndex = availableSortModes.findIndex((option) => getSortBase(option) === currentBase);
+  const nextOption = availableSortModes[(currentIndex + 1) % availableSortModes.length] ?? availableSortModes[0] ?? 'best-new';
+
+  return toggleSortMode(currentMode, nextOption);
+}
+
 export function DiscoveryControlsBar({
   availableSortModes = DEFAULT_SORT_OPTIONS,
   filterMode,
@@ -192,25 +208,25 @@ export function DiscoveryControlsBar({
         <TextInput
           onChangeText={onSearchChange}
           placeholder="Search"
-          placeholderTextColor={isDark ? DARK_CONTROL_TEXT : theme.palette.fog}
+          placeholderTextColor={isDark ? DARK_CONTROL_TEXT : LIGHT_SEARCH_PLACEHOLDER}
           style={[styles.searchInput, isDark && styles.searchInputDark]}
           value={searchQuery}
         />
       </View>
       <View style={styles.controlGroup}>
-        <ControlDockButton icon={getFilterIcon(filterMode, iconColor)} label={getFilterLabel(filterMode)} onPress={() => setOpenMenu((current) => (current === 'filter' ? null : 'filter'))} styles={styles} />
+        <ControlDockButton icon={getFilterIcon(filterMode, iconColor)} label={getFilterLabel(filterMode)} onLongPress={() => setOpenMenu((current) => (current === 'filter' ? null : 'filter'))} onPress={() => setOpenMenu((current) => (current === 'filter' ? null : 'filter'))} styles={styles} />
         {openMenu === 'filter' ? (
-          <View style={styles.dropdownMenu}>
+          <PopupMenu style={styles.dropdownMenuShadow}>
             {FILTER_OPTIONS.map((option) => (
               <DropdownOption active={option === filterMode} icon={getFilterIcon(option, iconColor)} key={option} label={getFilterLabel(option)} onPress={() => selectFilter(option)} styles={styles} />
             ))}
-          </View>
+          </PopupMenu>
         ) : null}
       </View>
       <View style={styles.controlGroup}>
-        <ControlDockButton icon={getSortIcon(sortMode, iconColor)} label={getSortLabel(sortMode)} onPress={() => setOpenMenu((current) => (current === 'sort' ? null : 'sort'))} styles={styles} wide />
+        <ControlDockButton icon={getSortIcon(sortMode, iconColor)} label={getSortLabel(sortMode)} onLongPress={() => setOpenMenu((current) => (current === 'sort' ? null : 'sort'))} onPress={() => setOpenMenu((current) => (current === 'sort' ? null : 'sort'))} styles={styles} wide />
         {openMenu === 'sort' ? (
-          <View style={[styles.dropdownMenu, styles.sortDropdownMenu]}>
+          <PopupMenu style={[styles.dropdownMenuShadow, styles.sortDropdownMenu]}>
             {availableSortModes.map((option) => {
               const active = getSortBase(option) === getSortBase(sortMode);
               const optionDirection = active ? getSortDirection(sortMode) : getSortDirection(option);
@@ -227,7 +243,7 @@ export function DiscoveryControlsBar({
                 />
               );
             })}
-          </View>
+          </PopupMenu>
         ) : null}
       </View>
     </View>
@@ -247,32 +263,50 @@ function DropdownOption({
   onPress: () => void;
   styles: ReturnType<typeof createStyles>;
 }) {
-  return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.dropdownOption, active && styles.dropdownOptionActive, pressed && styles.pressed]}>
-      {icon ? <View style={styles.dropdownOptionIcon}>{icon}</View> : <View style={styles.dropdownOptionIcon} />}
-      <Text numberOfLines={1} style={[styles.dropdownOptionLabel, active && styles.dropdownOptionLabelActive]}>{label}</Text>
-    </Pressable>
-  );
+  return <PopupMenuItem active={active} icon={icon} label={label} onPress={onPress} />;
 }
 
 function ControlDockButton({
   icon,
   label,
+  onLongPress,
   onPress,
   styles,
   wide = false,
 }: {
   icon?: ReactNode | null;
   label: string;
+  onLongPress?: () => void;
   onPress: () => void;
   styles: ReturnType<typeof createStyles>;
   wide?: boolean;
 }) {
+  const longPressTriggeredRef = useRef(false);
+
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.controlButton, wide && styles.sortButton, pressed && styles.pressed]}>
+    <BlockShadowPressable
+      accessibilityRole="button"
+      contentStyle={styles.controlButton}
+      delayLongPress={260}
+      onLongPress={() => {
+        longPressTriggeredRef.current = true;
+        onLongPress?.();
+      }}
+      onPress={() => {
+        if (longPressTriggeredRef.current) {
+          longPressTriggeredRef.current = false;
+          return;
+        }
+
+        onPress();
+      }}
+      pressedContentStyle={styles.pressed}
+      shadowOffset={DS.shadow.fine.x}
+      style={wide && styles.sortButton}
+    >
       {icon}
       <Text numberOfLines={1} style={styles.controlButtonLabel}>{label}</Text>
-    </Pressable>
+    </BlockShadowPressable>
   );
 }
 
@@ -290,7 +324,8 @@ function createStyles(
       gap: spacing.xs,
       justifyContent: 'flex-start',
       paddingHorizontal: spacing.sm,
-      paddingVertical: spacing.xs,
+      paddingBottom: spacing.md,
+      paddingTop: spacing.xs,
       position: 'relative',
       zIndex: SEARCH_FILTER_SORT_Z_INDEX,
     },
@@ -329,10 +364,6 @@ function createStyles(
       minHeight: 40,
       minWidth: 84,
       paddingHorizontal: spacing.sm,
-      shadowColor: '#000000',
-      shadowOffset: { width: DS.shadow.fine.x, height: DS.shadow.fine.y },
-      shadowOpacity: 1,
-      shadowRadius: 0,
     },
     controlGroup: {
       position: 'relative',
@@ -345,25 +376,23 @@ function createStyles(
       fontWeight: DS.font.weight.bold,
     },
     dismissLayer: {
-      bottom: 0,
-      left: 0,
+      bottom: -1000,
+      left: -1000,
       position: 'absolute',
-      right: 0,
-      top: -220,
+      right: -1000,
+      top: -1000,
       zIndex: 4,
     },
     dropdownMenu: {
       backgroundColor: mode === 'dark' ? colors.buttonPrimary : colors.surfaceCard,
       borderColor: mode === 'dark' ? DARK_CONTROL_BORDER : colors.borderStrong,
       borderWidth: DS.stroke.fine,
+    },
+    dropdownMenuShadow: {
       bottom: 48,
       minWidth: 148,
       position: 'absolute',
       right: 0,
-      shadowColor: '#000000',
-      shadowOffset: { width: DS.shadow.fine.x, height: DS.shadow.fine.y },
-      shadowOpacity: 1,
-      shadowRadius: 0,
       zIndex: THREE_DOT_MENU_Z_INDEX,
     },
     dropdownOption: {
@@ -402,7 +431,6 @@ function createStyles(
       minWidth: 164,
     },
     pressed: {
-      shadowOpacity: 0,
       transform: [{ translateX: 1 }, { translateY: 1 }],
     },
   });

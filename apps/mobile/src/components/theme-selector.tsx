@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import ContrastIcon from '../../assets/Icons/contrast-2-fill.svg';
 import SunIcon from '../../assets/Icons/sun-line.svg';
@@ -7,6 +7,7 @@ import { useAppTheme } from '../design/theme';
 import { ThemeMode, useThemeStore } from '../state/theme-store';
 import { spacing, typeScale } from '../design/tokens';
 import { AppButton } from './ui/app-button';
+import { BlockShadowPressable } from './ui/block-shadow';
 
 type ThemeSelectorProps = {
   showToggleAction?: boolean;
@@ -19,6 +20,8 @@ const LIGHT_BUTTON_TEXT = '#222222';
 const DARK_BUTTON_FILL = '#333333';
 const DARK_BUTTON_BORDER = '#1A1A19';
 const DARK_BUTTON_TEXT = '#FFFFFF';
+const THEME_BUTTON_CONTENT_HEIGHT = 52;
+const THEME_BUTTON_SHADOW_OFFSET = 4;
 
 export function ThemeSelector({ showToggleAction = false }: ThemeSelectorProps) {
   const theme = useAppTheme();
@@ -38,20 +41,23 @@ export function ThemeSelector({ showToggleAction = false }: ThemeSelectorProps) 
             : <ContrastIcon color={previewIconColor} height={18} width={18} />;
 
           return (
-            <Pressable
+            <BlockShadowPressable
               accessibilityRole="button"
-              key={themeMode}
-              onPress={() => setMode(themeMode)}
-              style={({ pressed }) => [
+              contentStyle={[
                 styles.option,
                 themeMode === 'light' ? styles.lightOption : styles.darkOption,
                 active && styles.optionActive,
-                pressed && styles.pressed,
               ]}
+              key={themeMode}
+              onPress={() => setMode(themeMode)}
+              pressedContentStyle={styles.pressed}
+              shadowOffset={THEME_BUTTON_SHADOW_OFFSET}
+              shadowVisible={!active}
+              style={styles.optionShadow}
             >
               {icon}
               <Text style={[styles.optionLabel, themeMode === 'light' ? styles.lightOptionLabel : styles.darkOptionLabel]}>{themeMode.toUpperCase()}</Text>
-            </Pressable>
+            </BlockShadowPressable>
           );
         })}
       </View>
@@ -71,13 +77,15 @@ function createStyles(intervals: ReturnType<typeof useAppTheme>['uiSpacing']) {
     option: {
       alignItems: 'center',
       borderWidth: 2,
-      flex: 1,
       flexDirection: 'row',
       gap: spacing.xs,
       justifyContent: 'center',
-      minHeight: 52,
+      minHeight: THEME_BUTTON_CONTENT_HEIGHT,
       paddingHorizontal: spacing.md,
-      boxShadow: '4px 4px 0px #000000',
+    },
+    optionShadow: {
+      flex: 1,
+      height: THEME_BUTTON_CONTENT_HEIGHT + THEME_BUTTON_SHADOW_OFFSET,
     },
     lightOption: {
       backgroundColor: LIGHT_BUTTON_FILL,
@@ -88,8 +96,7 @@ function createStyles(intervals: ReturnType<typeof useAppTheme>['uiSpacing']) {
       borderColor: DARK_BUTTON_BORDER,
     },
     optionActive: {
-      boxShadow: [],
-      transform: [{ translateX: 1 }, { translateY: 1 }],
+      transform: [{ translateX: 4 }, { translateY: 4 }],
     },
     optionLabel: {
       fontFamily: 'IBMPlexMono',
@@ -104,7 +111,6 @@ function createStyles(intervals: ReturnType<typeof useAppTheme>['uiSpacing']) {
       color: DARK_BUTTON_TEXT,
     },
     pressed: {
-      boxShadow: [],
       transform: [{ translateX: 1 }, { translateY: 1 }],
     },
     row: {

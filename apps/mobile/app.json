@@ -1,20 +1,23 @@
 {
   "expo": {
-    "name": "BandFan Mobile",
+    "name": "BandFan",
     "slug": "bandfan-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/BandFan/BF Light No shadow.png",
+    "icon": "./assets/BandFan/Logo/android/playstore-icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
     "scheme": "bandfan-mobile",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/BandFan/Logo/android/playstore-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#FFF9EF"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "UIBackgroundModes": ["audio"]
+      }
     },
     "android": {
       "package": "space.bandfan.mobile",
@@ -24,19 +27,20 @@
         "FOREGROUND_SERVICE_MEDIA_PLAYBACK"
       ],
       "adaptiveIcon": {
-        "foregroundImage": "./assets/BandFan/BF Light No shadow.png",
-        "backgroundColor": "#FFF9EF"
+        "foregroundImage": "./assets/BandFan/Logo/android/mipmap-xxxhdpi/ic_launcher_foreground.png",
+        "backgroundColor": "#FFFAF0"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/BandFan/BF Light No shadow.png"
+      "favicon": "./assets/BandFan/Logo/android/ic_launcher-web.png"
     },
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "expo-font"
+      "expo-font",
+      "expo-audio"
     ]
   }
 }

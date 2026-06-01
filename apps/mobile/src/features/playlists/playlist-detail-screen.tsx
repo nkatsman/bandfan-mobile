@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { AppBackgroundPattern } from '../../components/app-background-pattern';
 import { AppSidebar } from '../../components/app-sidebar';
 import { DiscoveryControlsBar } from '../../components/discovery/discovery-controls-bar';
 import { MusicPreferenceControls } from '../../components/music-preference-controls';
@@ -35,6 +36,8 @@ const BOTTOM_MENU_ITEMS = [
   { key: 'account', label: 'ACCOUNT' },
 ];
 const SEARCH_FILTER_SORT_Z_INDEX = 4000;
+const SONG_REACH_OFFSET = 48;
+const HEADER_CENTER_OFFSET = 24;
 
 export function PlaylistDetailScreen({ playlistId }: PlaylistDetailScreenProps) {
   const router = useRouter();
@@ -140,11 +143,14 @@ export function PlaylistDetailScreen({ playlistId }: PlaylistDetailScreenProps) 
   if (!playlist) {
     return (
       <View style={styles.root}>
+        <AppBackgroundPattern />
         <ScrollView {...pullToRefreshProps} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} style={styles.scrollArea}>
           {refreshIndicator}
-          <ScreenHeader counter={playlistsQuery.isLoading ? formatLoadingText('Loading', loadingDotCount) : 'Playlist not found.'} onLogoPress={() => setSidebarVisible(true)} title="Playlist">
-            <MusicPreferenceControls />
-          </ScreenHeader>
+          <ScreenHeader counter={playlistsQuery.isLoading ? formatLoadingText('Loading', loadingDotCount) : 'Playlist not found.'} onLogoPress={() => setSidebarVisible(true)} title="Playlist" verticalOffset={HEADER_CENTER_OFFSET} />
+
+          <View style={styles.musicControlsShelf}>
+            <MusicPreferenceControls layout="fill" showNormalization={false} />
+          </View>
         </ScrollView>
         <AppSidebar onClose={() => setSidebarVisible(false)} visible={sidebarVisible} />
       </View>
@@ -153,12 +159,14 @@ export function PlaylistDetailScreen({ playlistId }: PlaylistDetailScreenProps) 
 
   return (
     <View style={styles.root}>
+      <AppBackgroundPattern />
       <ScrollView {...pullToRefreshProps} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} style={styles.scrollArea}>
         {refreshIndicator}
-        <ScreenHeader counter={isSongsLoading ? formatLoadingText('Loading', loadingDotCount) : `${playlistSongs.length} songs in this playlist`} onLogoPress={() => setSidebarVisible(true)} title={playlist.title}>
-          <MusicPreferenceControls />
-        </ScreenHeader>
-        {playlist.description ? <Text style={styles.description}>{playlist.description}</Text> : null}
+        <ScreenHeader counter={isSongsLoading ? formatLoadingText('Loading', loadingDotCount) : `${playlistSongs.length} songs in this playlist`} description={playlist.description} onLogoPress={() => setSidebarVisible(true)} title={playlist.title} verticalOffset={HEADER_CENTER_OFFSET} />
+
+        <View style={styles.musicControlsShelf}>
+          <MusicPreferenceControls layout="fill" showNormalization={false} />
+        </View>
 
         {likeErrorMessage ? (
           <>
@@ -228,19 +236,21 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
     },
     scrollArea: {
       flex: 1,
+      position: 'relative',
+      zIndex: 1,
     },
     content: {
       paddingBottom: spacing.sm,
       paddingTop: spacing.sm,
     },
-    description: {
-      color: colors.textSecondary,
-      fontFamily: DS.font.family,
-      fontSize: typeScale.small,
-      fontWeight: '700',
-      lineHeight: 18,
+    musicControlsShelf: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.xs,
+      marginTop: SONG_REACH_OFFSET - HEADER_CENTER_OFFSET,
+      paddingBottom: spacing.xs,
       paddingHorizontal: spacing.sm,
-      paddingBottom: spacing.sm,
+      paddingTop: spacing.xs,
     },
     bottomControlsDock: {
       backgroundColor: colors.appBackground,

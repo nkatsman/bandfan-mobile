@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { getArtworkPalette } from '../../design/theme';
 import { apiClient, ApiClientError } from '../../lib/api/client';
 import { useSessionStore } from '../../state/session-store';
-import { Song } from '../../types/music';
+import { Song, type LoudnessAnalysis } from '../../types/music';
 import { useThemeStore } from '../../state/theme-store';
 
 export const discoverySongsQueryKey = ['discovery-songs'] as const;
@@ -16,6 +16,7 @@ export const discoverySongsQueryDefaults = {
 } as const;
 const DISCOVERY_PAGE_LIMIT = 50;
 const DISCOVERY_MAX_PAGES = 4;
+const discoveryRequestPromises = new Map<string, Promise<Song[]>>();
 
 const discoveryItemSchema = z
   .object({
@@ -158,6 +159,38 @@ function toTimestampMillis(value: unknown) {
   }
 
   return undefined;
+}
+
+function readLoudnessAnalysis(value: unknown): LoudnessAnalysis | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const status = record.status;
+
+  if (status !== 'complete' && status !== 'pending' && status !== 'failed') {
+    return null;
+  }
+
+  return {
+    analysisCompletedAt: readString(record.analysisCompletedAt) ?? null,
+    analysisVersion: readString(record.analysisVersion) ?? null,
+    analyzedAssetStoragePath: readString(record.analyzedAssetStoragePath) ?? null,
+    failureReason: readString(record.failureReason) ?? null,
+    integratedLufs: toFiniteNumber(record.integratedLufs) ?? null,
+    loudnessRange: toFiniteNumber(record.loudnessRange) ?? null,
+    normalizationGainDb: toFiniteNumber(record.normalizationGainDb) ?? null,
+    source: readString(record.source) ?? null,
+    status,
+    truePeakDb: toFiniteNumber(record.truePeakDb) ?? null,
+  };
+}
+
+function readLoudnessFromVariants(value: unknown): LoudnessAnalysis | null {
+  return readVersionEntries(value)
+    .map((entry) => readLoudnessAnalysis((entry as Record<string, unknown>).loudnessAnalysis))
+    .find((analysis): analysis is LoudnessAnalysis => Boolean(analysis)) ?? null;
 }
 
 function extractItems(response: unknown): DiscoveryItem[] {
@@ -361,6 +394,7 @@ function normalizeRawDiscoverySong(song: RawDiscoverySong, bandsById: Map<string
     durationLabel: '0:00',
     id: String(song.id),
     liked: readRawSongLiked(song),
+    loudnessAnalysis: readLoudnessAnalysis(record.loudnessAnalysis) ?? readLoudnessFromVariants(record.variants),
       playCount: toFiniteNumber(record.playCount ?? record.plays ?? record.listenCount),
       publishedAt: toTimestampMillis(record.publishedAtMillis ?? record.publishedAt ?? record.releasedAt ?? record.createdAt),
     sourceLabel: toSourceLabel(song.managementQuery?.status ?? song.variants?.[0]?.status ?? 'DISCOVERY'),
@@ -465,6 +499,7 @@ function normalizeDiscoverySong(item: DiscoveryItem, index: number): Song {
     durationLabel: toDurationLabel(item.durationLabel ?? item.duration),
     id: String(id),
     liked: item.liked ?? item.saved ?? item.isLiked ?? false,
+    loudnessAnalysis: readLoudnessAnalysis(record.loudnessAnalysis) ?? readLoudnessFromVariants(record.variants),
       playCount: toFiniteNumber(item.playCount ?? item.plays),
       publishedAt: toTimestampMillis(item.publishedAtMillis ?? item.publishedAt),
     sourceLabel: toSourceLabel(item.sourceLabel),
@@ -477,6 +512,24 @@ function normalizeDiscoverySong(item: DiscoveryItem, index: number): Song {
 async function fetchDiscoverySongsWithOptions(options?: { includeAiAssisted?: boolean }) {
   const requestPath = '/api/fan/discover/songs';
   const { status } = useSessionStore.getState();
+
+  const requestKey = `${status}:${options?.includeAiAssisted === true ? 'ai' : 'human'}`;
+  const currentRequest = discoveryRequestPromises.get(requestKey);
+
+  if (currentRequest) {
+    return currentRequest;
+  }
+
+  const requestPromise = fetchDiscoverySongsPages(requestPath, status, options).finally(() => {
+    discoveryRequestPromises.delete(requestKey);
+  });
+
+  discoveryRequestPromises.set(requestKey, requestPromise);
+
+  return requestPromise;
+}
+
+async function fetchDiscoverySongsPages(requestPath: string, status: ReturnType<typeof useSessionStore.getState>['status'], options?: { includeAiAssisted?: boolean }) {
   const aggregatedSongs: Song[] = [];
   const seenSongIds = new Set<string>();
 

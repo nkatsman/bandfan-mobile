@@ -7,12 +7,14 @@ import CheckIcon from '../../../assets/Icons/check-line.svg';
 import PencilIcon from '../../../assets/Icons/pencil-line.svg';
 import SaveIcon from '../../../assets/Icons/save-fill.svg';
 import XIcon from '../../../assets/Icons/x-line.svg';
+import { AppBackgroundPattern } from '../../components/app-background-pattern';
 import { AppSidebar } from '../../components/app-sidebar';
 import { ScreenHeader } from '../../components/screen-header';
 import { SurfaceCard } from '../../components/surface-card';
 import { ThemeSelector } from '../../components/theme-selector';
 import { MusicPreferenceControls } from '../../components/music-preference-controls';
 import { AppButton } from '../../components/ui/app-button';
+import { BlockShadow } from '../../components/ui/block-shadow';
 import { DsInput } from '../../components/ui/ds-input';
 import { SwitchControl } from '../../components/ui/switch-control';
 import { spacing, typeScale } from '../../design/tokens';
@@ -22,6 +24,8 @@ import { connectGoogleAccount, disconnectGoogleAccount, sendEmailChangeVerificat
 import { accountProfileQueryDefaults, fetchAccountProfile, updateAccountDisplayName, updateAccountUsername } from './account-api';
 import { getUsernameValidationError, normalizeUsername } from './username';
 import { useSessionStore } from '../../state/session-store';
+
+const HEADER_CENTER_OFFSET = 24;
 
 export function AccountScreen() {
   const queryClient = useQueryClient();
@@ -181,8 +185,9 @@ export function AccountScreen() {
 
   return (
     <View style={styles.root}>
+      <AppBackgroundPattern />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} style={styles.scrollArea}>
-        <ScreenHeader counter={session?.email ?? 'Signed out'} onLogoPress={() => setSidebarVisible(true)} title={accountTitle} />
+        <ScreenHeader counter={session?.email ?? 'Signed out'} onLogoPress={() => setSidebarVisible(true)} title={accountTitle} verticalOffset={HEADER_CENTER_OFFSET} />
 
         <View style={styles.body}>
           <SurfaceCard>
@@ -307,9 +312,9 @@ export function AccountScreen() {
           </SurfaceCard>
 
           <SurfaceCard>
-            <Text style={styles.sectionTitle}>Music Defaults</Text>
+            <Text style={styles.sectionTitle}>Playback</Text>
             <View style={styles.musicControlsGrid}>
-              <MusicPreferenceControls />
+              <MusicPreferenceControls layout="account" />
             </View>
           </SurfaceCard>
 
@@ -320,6 +325,7 @@ export function AccountScreen() {
 
           {isAdmin ? (
             <SurfaceCard>
+              <Text style={styles.helperText}>test</Text>
               <View style={styles.toggleRow}>
                 <Text style={styles.debugModeTitle}>Debug Mode</Text>
                 <View style={styles.toggleControlSlot}>
@@ -335,7 +341,7 @@ export function AccountScreen() {
       <Modal animationType="fade" onRequestClose={() => setGoogleDisconnectConfirmVisible(false)} transparent visible={googleDisconnectConfirmVisible}>
         <View style={styles.confirmRoot}>
           <Pressable accessibilityRole="button" onPress={() => setGoogleDisconnectConfirmVisible(false)} style={styles.confirmBackdrop} />
-          <View style={styles.confirmPanel}>
+          <BlockShadow contentStyle={styles.confirmPanel} shadowOffset={4} style={styles.confirmPanelShadow}>
             <Text style={styles.confirmTitle}>Disconnect Google?</Text>
             <Text style={styles.confirmText}>{hasPasswordSignIn ? 'Google is only a sign-in method. Your email/password sign-in stays separate.' : 'Google is your only sign-in method. Set a password before disconnecting it.'}</Text>
             <View style={styles.confirmActions}>
@@ -351,7 +357,7 @@ export function AccountScreen() {
                 tone="danger"
               />
             </View>
-          </View>
+          </BlockShadow>
         </View>
       </Modal>
       <AppSidebar onClose={() => setSidebarVisible(false)} visible={sidebarVisible} />
@@ -376,6 +382,8 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
     },
     scrollArea: {
       flex: 1,
+      position: 'relative',
+      zIndex: 1,
     },
     sectionTitle: {
       color: colors.textPrimary,
@@ -423,12 +431,10 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
       borderWidth: 2,
       gap: spacing.md,
       marginHorizontal: spacing.md,
-      maxWidth: 420,
       padding: spacing.md,
-      shadowColor: '#000000',
-      shadowOffset: { width: 4, height: 4 },
-      shadowOpacity: 1,
-      shadowRadius: 0,
+    },
+    confirmPanelShadow: {
+      maxWidth: 420,
       width: '100%',
     },
     confirmRoot: {
@@ -449,9 +455,6 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
       fontWeight: '900',
     },
     musicControlsGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: spacing.xs,
       marginTop: spacing.md,
     },
     helperText: {

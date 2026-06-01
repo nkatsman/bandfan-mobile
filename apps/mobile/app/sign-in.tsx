@@ -2,7 +2,7 @@ import { router, useRootNavigationState } from 'expo-router';
 import type { User } from 'firebase/auth';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as ExpoLinking from 'expo-linking';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type ViewStyle } from 'react-native';
+import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import GoogleLogo from '../assets/Icons/logo-google.svg';
@@ -13,12 +13,20 @@ import SunIcon from '../assets/Icons/sun-line.svg';
 import { DsCard } from '../src/components/ui/ds-card';
 import { DsInput } from '../src/components/ui/ds-input';
 import { DsTabs } from '../src/components/ui/ds-tabs';
+import { BlockShadowPressable } from '../src/components/ui/block-shadow';
 import { DS, scaleH, scaleW } from '../src/design/ds';
 import { useAppTheme } from '../src/design/theme';
 import { cancelPendingGoogleAccount, fetchActiveLegalDocuments, fetchRegistrationStatus, initializeGoogleAccount, sendPasswordReset, signInWithEmail, signUpWithInvite, startGoogleSignIn, type ActiveLegalDocuments, type RegistrationStatus } from '../src/features/auth/auth-service';
+import { discoverySongsQueryDefaults, discoverySongsQueryKey, fetchDiscoverySongsForPreferences } from '../src/features/discovery/discovery-api';
+import { DEFAULT_PLAYER_SETTINGS, fetchPlayerSettings, playerSettingsQueryDefaults, playerSettingsQueryKey, type PlayerSettings } from '../src/features/preferences/player-settings-api';
 import { env, hasApiBaseUrl, hasFirebaseClientConfig } from '../src/lib/env';
+import { getCachedImageSrc } from '../src/lib/image-cache';
+import { queryClient } from '../src/lib/query-client';
 import { useSessionStore } from '../src/state/session-store';
 import { useThemeStore } from '../src/state/theme-store';
+
+const MIN_LAUNCH_MS = 1000;
+const PREFETCH_COVER_LIMIT = 8;
 
 type AuthMode = 'sign-in' | 'sign-up';
 
@@ -27,20 +35,25 @@ type PendingRegistration = {
   password: string;
 };
 
+type LaunchPrefetchStatus = 'idle' | 'loading' | 'ready' | 'error';
+
 export default function SignInScreen() {
   const theme = useAppTheme();
   const rootNavigationState = useRootNavigationState();
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const isDark = theme.mode === 'dark';
+  const hasThemeHydrated = useThemeStore((state) => state.hasHydrated);
+  const launchUsesDarkFallback = !hasThemeHydrated;
+  const visualIsDark = isDark || launchUsesDarkFallback;
   const placeholderColor = isDark ? '#6EA06E' : DS.color.progressFill;
   const status = useSessionStore((state) => state.status);
   const error = useSessionStore((state) => state.error);
-  const styles = useMemo(() => createStyles(screenWidth, screenHeight, isDark), [screenWidth, screenHeight, isDark]);
-  const backgroundPatternItems = useMemo(() => buildSignInPatternItems(screenWidth, screenHeight, isDark), [screenHeight, screenWidth, isDark]);
+  const styles = useMemo(() => createStyles(screenWidth, screenHeight, visualIsDark), [screenWidth, screenHeight, visualIsDark]);
+  const backgroundPatternItems = useMemo(() => buildSignInPatternItems(screenWidth, screenHeight, visualIsDark), [screenHeight, screenWidth, visualIsDark]);
   const logoPressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toggleMode = useThemeStore((state) => state.toggleMode);
-  const BrandLogo = isDark ? LogoDark : LogoLight;
-  const ThemeIcon = isDark ? SunIcon : ContrastIcon;
+  const BrandLogo = isDark || launchUsesDarkFallback ? LogoDark : LogoLight;
+  const ThemeIcon = visualIsDark ? SunIcon : ContrastIcon;
 
   // Logo SVG dimensions scaled from 440-px reference canvas
   const logoW = Math.round(scaleW(272.47, screenWidth));
@@ -77,7 +90,56 @@ export default function SignInScreen() {
   const [localError, setLocalError] = useState<string | null>(null);
   const [showGoogleInviteOnlyDialog, setShowGoogleInviteOnlyDialog] = useState(false);
   const [showRegistrationConfirm, setShowRegistrationConfirm] = useState(false);
+  const [hasLaunchMinimumElapsed, setHasLaunchMinimumElapsed] = useState(false);
+  const [launchPrefetchStatus, setLaunchPrefetchStatus] = useState<LaunchPrefetchStatus>('idle');
+  const [launchPrefetchError, setLaunchPrefetchError] = useState<string | null>(null);
+  const [bypassAuthenticatedLaunchShell, setBypassAuthenticatedLaunchShell] = useState(false);
   const submitLabel = isSubmitting ? Array.from({ length: processingDotCount }, () => '.').join(' ') : 'ENTER';
+  const isLaunchReady = hasLaunchMinimumElapsed && hasThemeHydrated && status !== 'loading';
+  const isAuthenticatedLaunch = status === 'signed-in' || status === 'preview';
+  const isDiscoverReady = !hasApiBaseUrl || launchPrefetchStatus === 'ready';
+  const shouldShowLaunchShell = !isLaunchReady || (isAuthenticatedLaunch && !bypassAuthenticatedLaunchShell);
+  const launchDotCount = useLoadingDotCount(!isLaunchReady || (isAuthenticatedLaunch && launchPrefetchStatus === 'loading'));
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setHasLaunchMinimumElapsed(true);
+    }, MIN_LAUNCH_MS);
+
+    return () => clearTimeout(timeout);
+  }, []);
+
+  useEffect(() => {
+    if (status === 'loading') {
+      return;
+    }
+
+    let isCanceled = false;
+
+    setLaunchPrefetchStatus('loading');
+    setLaunchPrefetchError(null);
+
+    void prefetchDiscoverLaunchData()
+      .then(() => {
+        if (!isCanceled) {
+          setLaunchPrefetchStatus('ready');
+        }
+      })
+      .catch((prefetchError) => {
+        if (!isCanceled) {
+          if (status === 'signed-in' || status === 'preview') {
+            setLaunchPrefetchStatus('error');
+            setLaunchPrefetchError(prefetchError instanceof Error ? prefetchError.message : 'Discover could not initialize.');
+          } else {
+            setLaunchPrefetchStatus('idle');
+          }
+        }
+      });
+
+    return () => {
+      isCanceled = true;
+    };
+  }, [status]);
 
   useEffect(() => {
     if (!isSubmitting) {
@@ -93,14 +155,12 @@ export default function SignInScreen() {
   }, [isSubmitting]);
 
   useEffect(() => {
-    if (!rootNavigationState?.key) {
+    if (!bypassAuthenticatedLaunchShell || status !== 'signed-in' || !rootNavigationState?.key) {
       return;
     }
 
-    if ((status === 'signed-in' || status === 'preview') && !isSubmitting && !showRegistrationConfirm && !pendingGoogleUser && !pendingRegistration) {
-      router.replace('/(tabs)');
-    }
-  }, [isSubmitting, pendingGoogleUser, pendingRegistration, rootNavigationState?.key, showRegistrationConfirm, status]);
+    router.replace('/(tabs)');
+  }, [bypassAuthenticatedLaunchShell, rootNavigationState?.key, status]);
 
   useEffect(() => {
     void (async () => {
@@ -171,6 +231,7 @@ export default function SignInScreen() {
 
     try {
       await signInWithEmail(email.trim(), password);
+      setBypassAuthenticatedLaunchShell(true);
     } catch (signInError) {
       const message = signInError instanceof Error ? signInError.message : 'Unable to sign in.';
       setLocalError(message);
@@ -266,6 +327,7 @@ export default function SignInScreen() {
       setShowRegistrationConfirm(false);
       setPendingRegistration(null);
       setPendingGoogleUser(null);
+      setBypassAuthenticatedLaunchShell(true);
     } catch (signUpError) {
       const message = signUpError instanceof Error ? signUpError.message : 'Registration failed.';
       setLocalError(message);
@@ -295,6 +357,8 @@ export default function SignInScreen() {
         setPendingRegistration(null);
         setHasAcceptedLegal(false);
         setShowRegistrationConfirm(true);
+      } else {
+        setBypassAuthenticatedLaunchShell(true);
       }
     } catch (googleError) {
       const message = googleError instanceof Error ? googleError.message : 'Google sign-in failed.';
@@ -321,11 +385,80 @@ export default function SignInScreen() {
     await onSignIn();
   };
 
+  const renderLogoCard = (shellStyle?: ViewStyle, pressedStyle: ViewStyle = styles.logoCardPressed) => (
+    <DsCard
+      fixedHeight={Math.round(scaleW(113.7, screenWidth))}
+      reserveShadowSize="thick"
+      shadowSize={logoPressed ? 'thin' : 'thick'}
+      style={[styles.logoCardShell, shellStyle, logoPressed && pressedStyle]}
+      width={Math.round(scaleW(334.73, screenWidth))}
+    >
+      <Pressable
+        accessibilityRole="button"
+        onPress={onLogoPress}
+        onPressIn={onLogoPressIn}
+        onPressOut={onLogoPressOut}
+        style={styles.logoTapArea}
+      >
+        <BrandLogo height={logoH} style={styles.logoGraphic} width={logoW} />
+        <View style={styles.themeIconSlot}>
+          <ThemeIcon color={visualIsDark ? '#FFFFFF' : DS.color.ink} height={15} width={15} />
+        </View>
+      </Pressable>
+    </DsCard>
+  );
+
   return (
     <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
       <View pointerEvents="none" style={styles.backgroundPattern}>
         {backgroundPatternItems.map((itemStyle, index) => <View key={index} style={itemStyle} />)}
       </View>
+      {shouldShowLaunchShell ? (
+        <View style={styles.launchShell}>
+          {renderLogoCard(styles.launchLogoCard, styles.launchLogoCardPressed)}
+          {!isLaunchReady || (isAuthenticatedLaunch && !isDiscoverReady && launchPrefetchStatus !== 'error') ? (
+            <Text style={styles.launchText}>Initialization{Array.from({ length: launchDotCount }, () => '.').join(' ')}</Text>
+          ) : isAuthenticatedLaunch && launchPrefetchStatus === 'error' ? (
+            <View style={styles.launchErrorBlock}>
+              <Text style={styles.launchText}>Initialization failed.</Text>
+              {launchPrefetchError ? <Text style={styles.launchErrorText}>{launchPrefetchError}</Text> : null}
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  setLaunchPrefetchStatus('loading');
+                  setLaunchPrefetchError(null);
+                  void prefetchDiscoverLaunchData()
+                    .then(() => setLaunchPrefetchStatus('ready'))
+                    .catch((prefetchError) => {
+                      setLaunchPrefetchStatus('error');
+                      setLaunchPrefetchError(prefetchError instanceof Error ? prefetchError.message : 'Discover could not initialize.');
+                    });
+                }}
+                style={({ pressed }) => [styles.launchSignInButton, pressed && styles.buttonPressed]}
+              >
+                <Text style={styles.launchSignInButtonText}>RETRY</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <BlockShadowPressable
+              accessibilityRole="button"
+              contentStyle={[styles.launchEnterButton, !hasFirebaseClientConfig && styles.buttonDisabled]}
+              disabled={isAuthenticatedLaunch ? !rootNavigationState?.key : !hasFirebaseClientConfig}
+              onPress={() => {
+                if (isAuthenticatedLaunch) {
+                  router.replace('/(tabs)');
+                }
+              }}
+              pressedContentStyle={styles.launchEnterButtonPressed}
+              shadowOffset={5}
+              shadowVisible={hasFirebaseClientConfig}
+              style={styles.launchEnterShadow}
+            >
+              <Text style={styles.launchEnterButtonText}>ENTER</Text>
+            </BlockShadowPressable>
+          )}
+        </View>
+      ) : (
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} style={styles.scrollArea}>
         {/* ── Logo card ─────────────────────────────────────────────────
             Reference proportions (440-px canvas):
@@ -334,26 +467,7 @@ export default function SignInScreen() {
               Visual unit: (334.73+14) wide — centred as whole (card+shadow)
               Logo       : 281.47 × 51.68 px, centred then −3 px left, +2 px down
         ──────────────────────────────────────────────────────────────── */}
-        <DsCard
-          fixedHeight={Math.round(scaleW(113.7, screenWidth))}
-          reserveShadowSize="thick"
-          shadowSize={logoPressed ? 'thin' : 'thick'}
-          style={[styles.logoCardShell, logoPressed && styles.logoCardPressed]}
-          width={Math.round(scaleW(334.73, screenWidth))}
-        >
-          <Pressable
-            accessibilityRole="button"
-            onPress={onLogoPress}
-            onPressIn={onLogoPressIn}
-            onPressOut={onLogoPressOut}
-            style={styles.logoTapArea}
-          >
-            <BrandLogo height={logoH} style={styles.logoGraphic} width={logoW} />
-            <View style={styles.themeIconSlot}>
-              <ThemeIcon color={isDark ? '#FFFFFF' : DS.color.ink} height={15} width={15} />
-            </View>
-          </Pressable>
-        </DsCard>
+        {renderLogoCard()}
 
         {/* ── Form card ─────────────────────────────────────────────────
             Reference proportions (440-px canvas):
@@ -495,6 +609,7 @@ export default function SignInScreen() {
           </View>
         </DsCard>
       </ScrollView>
+      )}
 
       <Modal animationType="fade" onRequestClose={() => setShowGoogleInviteOnlyDialog(false)} transparent visible={showGoogleInviteOnlyDialog}>
         <View style={styles.modalRoot}>
@@ -574,6 +689,54 @@ export default function SignInScreen() {
   );
 }
 
+function useLoadingDotCount(isActive: boolean) {
+  const [dotCount, setDotCount] = useState(1);
+
+  useEffect(() => {
+    if (!isActive) {
+      setDotCount(1);
+      return undefined;
+    }
+
+    const interval = setInterval(() => {
+      setDotCount((current) => (current >= 3 ? 1 : current + 1));
+    }, 420);
+
+    return () => clearInterval(interval);
+  }, [isActive]);
+
+  return dotCount;
+}
+
+async function prefetchDiscoverLaunchData() {
+  if (!hasApiBaseUrl) {
+    return;
+  }
+
+  const playerSettings = await queryClient.fetchQuery<PlayerSettings>({
+    queryFn: fetchPlayerSettings,
+    queryKey: playerSettingsQueryKey,
+    ...playerSettingsQueryDefaults,
+  }).catch(() => DEFAULT_PLAYER_SETTINGS);
+  const discoveryQueryKey = [...discoverySongsQueryKey, { includeAiAssisted: playerSettings.showAiAssistedDiscoverSongs }] as const;
+
+  await queryClient.fetchQuery({
+    queryFn: () => fetchDiscoverySongsForPreferences({ includeAiAssisted: playerSettings.showAiAssistedDiscoverSongs }),
+    queryKey: discoveryQueryKey,
+    ...discoverySongsQueryDefaults,
+  });
+
+  const songs = queryClient.getQueryData<Awaited<ReturnType<typeof fetchDiscoverySongsForPreferences>>>(discoveryQueryKey) ?? [];
+
+  void Promise.all(
+    songs
+      .slice(0, PREFETCH_COVER_LIMIT)
+      .map((song) => song.coverArtUrl)
+      .filter((coverArtUrl): coverArtUrl is string => Boolean(coverArtUrl))
+      .map((coverArtUrl) => Image.prefetch(getCachedImageSrc(coverArtUrl)).catch(() => false)),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Styles
 // ---------------------------------------------------------------------------
@@ -603,6 +766,79 @@ function createStyles(screenWidth: number, screenHeight: number, isDark: boolean
       flexGrow: 1,
       paddingBottom: 40,
       paddingTop: 12,
+    },
+    launchShell: {
+      alignItems: 'center',
+      flex: 1,
+      justifyContent: 'center',
+      paddingHorizontal: 24,
+      position: 'relative',
+      zIndex: 1,
+    },
+    launchLogoCard: {
+      marginBottom: 28,
+      transform: [],
+    },
+    launchLogoCardPressed: {
+      transform: [{ translateX: 8 }, { translateY: 8 }],
+    },
+    launchText: {
+      color: isDark ? '#F4F4F4' : DS.color.ink,
+      fontFamily: DS.font.family,
+      fontSize: DS.font.size.body,
+      fontWeight: DS.font.weight.bold,
+      minHeight: 24,
+      textAlign: 'center',
+    },
+    launchErrorBlock: {
+      alignItems: 'center',
+      gap: 12,
+      maxWidth: Math.round(scaleW(320, screenWidth)),
+    },
+    launchErrorText: {
+      color: isDark ? '#F4F4F4' : DS.color.ink,
+      fontFamily: DS.font.family,
+      fontSize: DS.font.size.small,
+      fontWeight: DS.font.weight.bold,
+      lineHeight: 18,
+      textAlign: 'center',
+    },
+    launchSignInButton: {
+      alignItems: 'center',
+      backgroundColor: DS.color.enterFill,
+      borderColor: DS.stroke.color,
+      borderWidth: DS.stroke.thin,
+      justifyContent: 'center',
+      minHeight: 58,
+      width: Math.round(scaleW(196, screenWidth)),
+    },
+    launchSignInButtonText: {
+      color: DS.color.cardSurface,
+      fontFamily: DS.font.family,
+      fontSize: DS.font.size.body,
+      fontWeight: DS.font.weight.bold,
+    },
+    launchEnterShadow: {
+      width: Math.round(scaleW(216, screenWidth)) + 5,
+    },
+    launchEnterButton: {
+      alignItems: 'center',
+      backgroundColor: DS.color.enterFill,
+      borderColor: DS.stroke.color,
+      borderWidth: DS.stroke.thin,
+      justifyContent: 'center',
+      minHeight: 64,
+      width: Math.round(scaleW(216, screenWidth)),
+    },
+    launchEnterButtonPressed: {
+      transform: [{ translateX: 2 }, { translateY: 2 }],
+    },
+    launchEnterButtonText: {
+      color: DS.color.cardSurface,
+      fontFamily: DS.font.family,
+      fontSize: 22,
+      fontWeight: '900',
+      letterSpacing: 0.8,
     },
 
     // Card shells (margins between cards)

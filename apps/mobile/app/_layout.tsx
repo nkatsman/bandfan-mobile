@@ -5,7 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
 import { useEffect } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppContentProtection } from '../src/components/core/app-content-protection';
 import { ThemeColorDebugOverlayStatic, ThumbZoneDebugOverlayStatic } from '../src/components/thumb-zone-debug-overlay';
@@ -14,6 +14,11 @@ import { useAppTheme } from '../src/design/theme';
 import { useBootstrapAuth } from '../src/features/auth/use-bootstrap-auth';
 import { AppProviders } from '../src/providers/app-providers';
 import { useDebugStore } from '../src/state/debug-store';
+
+const NOTIFICATION_BAR_LIGHT_FILL = '#E7BF7B';
+const NOTIFICATION_BAR_DARK_FILL = '#1A1A19';
+const NOTIFICATION_BAR_SHADOW = '#1A1A19';
+const NOTIFICATION_BAR_SHADOW_HEIGHT = 3;
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -29,6 +34,7 @@ export default function RootLayout() {
   const thumbOverlayVisible = useDebugStore((state) => state.thumbOverlayVisible);
   const toggleColorOverlay = useDebugStore((state) => state.toggleColorOverlay);
   const toggleThumbOverlay = useDebugStore((state) => state.toggleThumbOverlay);
+  const notificationBarFill = theme.mode === 'dark' ? NOTIFICATION_BAR_DARK_FILL : NOTIFICATION_BAR_LIGHT_FILL;
 
   useEffect(() => {
     void SystemUI.setBackgroundColorAsync(theme.ui.appBackground);
@@ -68,7 +74,8 @@ export default function RootLayout() {
   return (
     <AppProviders>
       <AppContentProtection />
-      <StatusBar style={theme.statusBarStyle} />
+      <StatusBar backgroundColor={notificationBarFill} style={theme.statusBarStyle} />
+      <NotificationBarChrome fillColor={notificationBarFill} />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: theme.ui.appBackground } }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="sign-in" />
@@ -112,7 +119,36 @@ export default function RootLayout() {
   );
 }
 
+function NotificationBarChrome({ fillColor }: { fillColor: string }) {
+  const insets = useSafeAreaInsets();
+
+  if (Platform.OS === 'web' || insets.top <= 0) {
+    return null;
+  }
+
+  return (
+    <View pointerEvents="none" style={[styles.notificationBarChrome, { backgroundColor: fillColor, height: insets.top + NOTIFICATION_BAR_SHADOW_HEIGHT }]}>
+      <View style={styles.notificationBarShadow} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  notificationBarChrome: {
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    zIndex: 2147482000,
+  },
+  notificationBarShadow: {
+    backgroundColor: NOTIFICATION_BAR_SHADOW,
+    bottom: 0,
+    height: NOTIFICATION_BAR_SHADOW_HEIGHT,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+  },
   debugButtonLayer: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'flex-end',

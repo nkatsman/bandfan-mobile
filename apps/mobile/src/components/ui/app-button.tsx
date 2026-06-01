@@ -1,9 +1,10 @@
 import { cloneElement, isValidElement, useMemo } from 'react';
-import { Pressable, StyleSheet, Text, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, Text, type StyleProp, type ViewStyle } from 'react-native';
 import type { ReactNode } from 'react';
 
 import { spacing, typeScale } from '../../design/tokens';
 import { useAppTheme } from '../../design/theme';
+import { BlockShadowPressable } from './block-shadow';
 
 const DESTRUCTIVE_TEXT_COLOR = '#FFFFFF';
 const DARK_BUTTON_FILL = '#333333';
@@ -32,16 +33,20 @@ export function AppButton({ active = false, disabled = false, icon, iconOnly = f
   const renderedIcon = isValidElement<{ color?: string }>(icon) ? cloneElement(icon, { color: iconColor }) : icon;
 
   return (
-    <Pressable
+    <BlockShadowPressable
       accessibilityLabel={iconOnly ? label : undefined}
       accessibilityRole="button"
+      contentStyle={[styles.button, square && styles.square, styles[tone], active && !disabled && styles.pressedActive, disabled && styles.disabled]}
       disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => [styles.button, square && styles.square, styles[tone], (active || pressed) && !disabled && styles.pressed, disabled && styles.disabled, style]}
+      pressedContentStyle={styles.pressed}
+      shadowOffset={4}
+      shadowVisible={!active && !disabled}
+      style={style}
     >
       {renderedIcon}
       {iconOnly ? null : <Text style={labelStyle}>{label}</Text>}
-    </Pressable>
+    </BlockShadowPressable>
   );
 }
 
@@ -56,7 +61,6 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui'], mode: Return
       justifyContent: 'center',
       minHeight: 52,
       paddingHorizontal: spacing.md,
-      boxShadow: '4px 4px 0px #000000',
     },
     danger: {
       backgroundColor: colors.buttonDanger,
@@ -86,8 +90,10 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui'], mode: Return
       letterSpacing: 0.8,
     },
     pressed: {
-      boxShadow: [],
       transform: [{ translateX: 1 }, { translateY: 1 }],
+    },
+    pressedActive: {
+      transform: [{ translateX: 4 }, { translateY: 4 }],
     },
     primary: {
       backgroundColor: mode === 'dark' ? DARK_BUTTON_FILL : colors.buttonPrimary,

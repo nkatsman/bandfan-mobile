@@ -41,8 +41,8 @@ export function ThumbZoneDebugOverlayStatic({ hand, opacity = 0.3 }: ThumbZoneDe
     : OVERLAY_IMAGE;
 
   return (
-    <View style={[styles.root, styles.pointerBoxNone]}>
-      <View style={[styles.overlay, styles.pointerNone]}>
+    <View pointerEvents="box-none" style={styles.root}>
+      <View pointerEvents="none" style={styles.overlay}>
         <ImageBackground
           resizeMode="stretch"
           source={overlaySource}

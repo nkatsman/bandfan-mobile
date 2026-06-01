@@ -6,6 +6,7 @@ import { useAppTheme } from '../../design/theme';
 
 type SeekBarProps = {
   interactive?: boolean;
+  layoutMemoryKey?: string;
   value?: number | null;
   onSeekChange?: (value: number) => void;
   onSeek?: (value: number) => void;
@@ -13,13 +14,14 @@ type SeekBarProps = {
 
 const LIGHT_PLAY_CONTROL_FILL = '#FFFFFF';
 const LIGHT_PLAY_CONTROL_STROKE = '#222222';
+const rememberedTrackWidths = new Map<string, number>();
 
-export function SeekBar({ interactive = true, onSeek, onSeekChange, value = 0 }: SeekBarProps) {
+export function SeekBar({ interactive = true, layoutMemoryKey, onSeek, onSeekChange, value = 0 }: SeekBarProps) {
   const theme = useAppTheme();
   const clampedValue = useMemo(() => Math.max(0, Math.min(100, value ?? 0)), [value]);
   const [isDragging, setIsDragging] = useState(false);
   const [dragValue, setDragValue] = useState<number | null>(null);
-  const [trackWidth, setTrackWidth] = useState(0);
+  const [trackWidth, setTrackWidth] = useState(() => (layoutMemoryKey ? rememberedTrackWidths.get(layoutMemoryKey) ?? 0 : 0));
   const trackLeftRef = useRef(0);
 
   const displayedValue = isDragging && dragValue !== null ? dragValue : clampedValue;
@@ -56,7 +58,13 @@ export function SeekBar({ interactive = true, onSeek, onSeekChange, value = 0 }:
   }
 
   function handleLayout(event: LayoutChangeEvent) {
-    setTrackWidth(event.nativeEvent.layout.width);
+    const nextTrackWidth = event.nativeEvent.layout.width;
+
+    setTrackWidth(nextTrackWidth);
+
+    if (layoutMemoryKey && nextTrackWidth > 0) {
+      rememberedTrackWidths.set(layoutMemoryKey, nextTrackWidth);
+    }
   }
 
   const panResponder = useMemo(
@@ -104,7 +112,7 @@ export function SeekBar({ interactive = true, onSeek, onSeekChange, value = 0 }:
           },
         ]}
       />
-      <View style={[styles.track, { backgroundColor: theme.ui.progressTrack, borderRadius: trackRadius, shadowColor: '#000000' }]} />
+      <View style={[styles.track, { backgroundColor: theme.ui.progressTrack, borderRadius: trackRadius }]} />
       <View style={[styles.fill, { backgroundColor: theme.ui.progressFill, borderRadius: trackRadius, width: `${displayedValue}%` }]} />
       {interactive ? (
         <>
@@ -164,9 +172,6 @@ const styles = StyleSheet.create({
     marginTop: -3,
     position: 'absolute',
     right: 0,
-    shadowOffset: { width: 2, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
     top: '50%',
   },
   fill: {
@@ -177,8 +182,8 @@ const styles = StyleSheet.create({
     top: '50%',
   },
   thumb: {
-    borderWidth: 0,
-    boxShadow: `inset 0 0 0 2px ${LIGHT_PLAY_CONTROL_STROKE}`,
+    borderColor: LIGHT_PLAY_CONTROL_STROKE,
+    borderWidth: 2,
     overflow: 'hidden',
     position: 'absolute',
   },

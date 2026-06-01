@@ -10,22 +10,26 @@ import { saveSongPreference } from './preferences-api';
 
 export function useSongLikeAction() {
   const setSongLiked = useMusicStore((state) => state.setSongLiked);
+  const setPendingSongLiked = useMusicStore((state) => state.setPendingSongLiked);
   const syncPlayerLikedState = usePlayerStore((state) => state.setSongLiked);
   const [pendingSongIds, setPendingSongIds] = useState<string[]>([]);
 
   const mutation = useMutation({
     mutationFn: saveSongPreference,
     onError: (_error, variables) => {
+      setPendingSongLiked(variables.songId, null);
       setSongLiked(variables.songId, !variables.liked);
       syncPlayerLikedState(variables.songId, !variables.liked);
     },
     onMutate: async (variables) => {
       setPendingSongIds((current) => Array.from(new Set([...current, variables.songId])));
+      setPendingSongLiked(variables.songId, variables.liked);
       setSongLiked(variables.songId, variables.liked);
       syncPlayerLikedState(variables.songId, variables.liked);
     },
     onSettled: (_data, _error, variables) => {
       setPendingSongIds((current) => current.filter((songId) => songId !== variables.songId));
+      setPendingSongLiked(variables.songId, null);
     },
     onSuccess: (result) => {
       setSongLiked(result.songId, result.liked);

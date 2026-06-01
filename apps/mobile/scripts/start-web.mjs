@@ -1,5 +1,10 @@
 import { spawn } from 'node:child_process';
 
+const webEnv = {
+  ...process.env,
+  EXPO_PUBLIC_WEB_API_PROXY_URL: process.env.EXPO_PUBLIC_WEB_API_PROXY_URL || `http://localhost:${process.env.BANDFAN_PROXY_PORT ?? 8787}`,
+};
+
 const proxy = spawn('npm', ['run', 'proxy'], {
   env: process.env,
   shell: true,
@@ -7,7 +12,7 @@ const proxy = spawn('npm', ['run', 'proxy'], {
 });
 
 const web = spawn('npx', ['expo', 'start', '--web'], {
-  env: process.env,
+  env: webEnv,
   shell: true,
   stdio: 'inherit',
 });
