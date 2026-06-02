@@ -8,6 +8,12 @@ Use the `BandFan RN Dev APK Orchestrator` agent.
 Goal:
 Run the BandFan mobile Android debug APK on the connected physical Android phone with Metro Fast Refresh.
 
+Environment split policy:
+- debug/dev runs must use development environment values (for example `apps/mobile/.env.local`)
+- debug/dev runs must not use release signing inputs (`BANDFAN_UPLOAD_*`)
+- debug/dev runs may use localhost or adb reverse as needed
+- release-only checks (non-debug signer, no localhost API endpoints) do not apply to debug runs
+
 Default behavior:
 - prefer connected device serial `41050DLJG000PD` when present
 - do not stop just because `adb devices -l` hangs once; use bounded retries and direct `adb -s 41050DLJG000PD get-state` / `shell getprop` probes first

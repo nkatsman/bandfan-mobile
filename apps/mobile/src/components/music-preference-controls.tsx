@@ -30,6 +30,7 @@ const LIGHT_THEME_TEXT_COLOR = '#222222';
 const DARK_BUTTON_TEXT_COLOR = '#FFFFFF';
 const DARK_BUTTON_ICON_COLOR = '#6EA06E';
 const DARK_BORDER_COLOR = '#1A1A19';
+const DARK_PRESSED_BUTTON_FILL = '#8F8F8F';
 const MUSIC_CONTROL_ICON_SIZE = 18;
 const ACCOUNT_MUSIC_CONTROL_ICON_SIZE = 22;
 const OPTION_BUTTON_CONTENT_HEIGHT = 58;
@@ -583,6 +584,7 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
       width: '86%',
     },
     pressed: {
+      backgroundColor: theme.mode === 'dark' ? DARK_PRESSED_BUTTON_FILL : undefined,
       transform: [{ translateX: 1 }, { translateY: 1 }],
     },
     tooltipBackdrop: {

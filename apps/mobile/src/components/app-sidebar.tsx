@@ -4,14 +4,10 @@ import { useEffect, useMemo } from 'react';
 import { BackHandler, Modal, PanResponder, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import LogoDark from '../../assets/BandFan/BandFan - Logo Dark.svg';
-import LogoLight from '../../assets/BandFan/BandFan - Logo Light.svg';
 import AccountIcon from '../../assets/Icons/user-fill.svg';
 import CompassIcon from '../../assets/Icons/compass-3-fill.svg';
-import ContrastIcon from '../../assets/Icons/contrast-2-fill.svg';
 import FolderMusicIcon from '../../assets/Icons/folder-music-fill.svg';
 import HeartIcon from '../../assets/Icons/poker-hearts-fill.svg';
-import SunIcon from '../../assets/Icons/sun-line.svg';
 import TriangleIcon from '../../assets/Icons/triangle-fill.svg';
 import { DEBUG_THUMB_ZONES_HAND, DEBUG_THUMB_ZONES_OPACITY } from '../config/debug-mode';
 import { radii, spacing, typeScale } from '../design/tokens';
@@ -22,8 +18,9 @@ import { useDebugStore } from '../state/debug-store';
 import { useSessionStore } from '../state/session-store';
 import { useMainMenuStore } from '../state/main-menu-store';
 import { useThemeStore } from '../state/theme-store';
+import { BrandLogoMark } from './brand-logo-mark';
 import { LOGO_BUTTON_SHADOW_SIZE, LOGO_BUTTON_SIZE } from './screen-header';
-import { ThemeColorDebugOverlayStatic, ThumbZoneDebugOverlayStatic } from './thumb-zone-debug-overlay';
+import { DebugControlsOverlay, ThemeColorDebugOverlayStatic, ThumbZoneDebugOverlayStatic } from './thumb-zone-debug-overlay';
 import { BlockShadow, BlockShadowPressable } from './ui/block-shadow';
 
 const menuItems = [
@@ -82,8 +79,6 @@ export function AppSidebar({ onClose, visible }: AppSidebarProps) {
   const displayName = profile?.displayName || session?.displayName || 'BandFan Listener';
   const username = profile?.username || null;
   const email = profile?.email || session?.email || '';
-  const Logo = mode === 'light' ? LogoLight : LogoDark;
-  const ThemeIcon = mode === 'dark' ? SunIcon : ContrastIcon;
   const themeToggleLabel = mode === 'dark' ? 'Switch to light theme' : 'Switch to dark theme';
   const menuAccent = mode === 'light' ? theme.palette.blueDark : MENU_ACTION_GREEN;
   const menuRows = [[menuItems[0], menuItems[1]], [menuItems[2], menuItems[3]]];
@@ -159,10 +154,7 @@ export function AppSidebar({ onClose, visible }: AppSidebarProps) {
             <View style={styles.menuSection}>
               <View style={styles.logoRow}>
                 <Pressable accessibilityLabel={themeToggleLabel} accessibilityRole="button" onPress={toggleMode} style={styles.logoButton}>
-                  <Logo height={112} width={278} />
-                  <View style={styles.themeIconSlot}>
-                    <ThemeIcon color={theme.ui.textPrimary} height={19} width={19} />
-                  </View>
+                  <BrandLogoMark height={106} width={322} />
                 </Pressable>
               </View>
 
@@ -216,8 +208,9 @@ export function AppSidebar({ onClose, visible }: AppSidebarProps) {
           </BlockShadow>
         </View>
       </View>
-      {debugModeEnabled && thumbOverlayVisible ? <ThumbZoneDebugOverlayStatic hand={DEBUG_THUMB_ZONES_HAND} opacity={DEBUG_THUMB_ZONES_OPACITY} /> : null}
-      {debugModeEnabled && colorOverlayMode !== 'off' ? <ThemeColorDebugOverlayStatic side={colorOverlayMode} /> : null}
+      {__DEV__ && debugModeEnabled && thumbOverlayVisible ? <ThumbZoneDebugOverlayStatic hand={DEBUG_THUMB_ZONES_HAND} opacity={DEBUG_THUMB_ZONES_OPACITY} /> : null}
+      {__DEV__ && debugModeEnabled && colorOverlayMode !== 'off' ? <ThemeColorDebugOverlayStatic side={colorOverlayMode} /> : null}
+      {__DEV__ ? <DebugControlsOverlay /> : null}
     </Modal>
   );
 }

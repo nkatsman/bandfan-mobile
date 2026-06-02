@@ -24,7 +24,7 @@ import { FullPlayerPanel } from '../features/player/player-screen';
 import { SurfaceCard } from './surface-card';
 import { BlockShadowPressable } from './ui/block-shadow';
 import { SeekBar } from './ui/seek-bar';
-import { ThemeColorDebugOverlayStatic, ThumbZoneDebugOverlayStatic } from './thumb-zone-debug-overlay';
+import { DebugControlsOverlay, ThemeColorDebugOverlayStatic, ThumbZoneDebugOverlayStatic } from './thumb-zone-debug-overlay';
 
 const LIGHT_PLAY_CONTROL_FILL = '#FFFFFF';
 const LIGHT_PLAY_CONTROL_STROKE = '#222222';
@@ -254,8 +254,9 @@ export function MiniPlayer({ compact = false }: { compact?: boolean }) {
     <View style={[styles.container, compact && styles.containerCompact, isMiniPlayerHidden && styles.containerHidden]}>
       <Modal animationType="none" onRequestClose={closeFullPlayer} visible={isFullPlayerOpen}>
         <FullPlayerPanel includeBottomMenu onCollapse={closeFullPlayer} onNavigate={closeFullPlayer} />
-        {debugModeEnabled && thumbOverlayVisible ? <ThumbZoneDebugOverlayStatic hand={DEBUG_THUMB_ZONES_HAND} opacity={DEBUG_THUMB_ZONES_OPACITY} /> : null}
-        {debugModeEnabled && colorOverlayMode !== 'off' ? <ThemeColorDebugOverlayStatic side={colorOverlayMode} /> : null}
+        {__DEV__ && debugModeEnabled && thumbOverlayVisible ? <ThumbZoneDebugOverlayStatic hand={DEBUG_THUMB_ZONES_HAND} opacity={DEBUG_THUMB_ZONES_OPACITY} /> : null}
+        {__DEV__ && debugModeEnabled && colorOverlayMode !== 'off' ? <ThemeColorDebugOverlayStatic side={colorOverlayMode} /> : null}
+        {__DEV__ ? <DebugControlsOverlay /> : null}
       </Modal>
 
       <View style={styles.gestureShell} {...miniPlayerPanResponder.panHandlers}>

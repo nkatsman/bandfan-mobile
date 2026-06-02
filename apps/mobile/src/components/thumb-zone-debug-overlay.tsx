@@ -1,8 +1,10 @@
-import { ImageBackground, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { ImageBackground, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { typeScale } from '../design/tokens';
 import { useAppTheme } from '../design/theme';
+import { useDebugStore } from '../state/debug-store';
 
 type HandPreference = 'left' | 'right';
 
@@ -82,6 +84,34 @@ export function ThemeColorDebugOverlayStatic({ side }: { side: ColorOverlaySide 
           </View>
         ))}
       </ScrollView>
+    </View>
+  );
+}
+
+export function DebugControlsOverlay() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const debugModeEnabled = useDebugStore((state) => state.debugModeEnabled);
+  const toggleColorOverlay = useDebugStore((state) => state.toggleColorOverlay);
+  const toggleThumbOverlay = useDebugStore((state) => state.toggleThumbOverlay);
+
+  if (!__DEV__ || !debugModeEnabled) {
+    return null;
+  }
+
+  return (
+    <View pointerEvents="box-none" style={[styles.debugButtonLayer, { paddingTop: insets.top + 4 }]}>
+      <View style={styles.debugButtonRow}>
+        <Pressable accessibilityLabel="Go back" accessibilityRole="button" onPress={() => router.back()} style={({ pressed }) => [styles.debugButton, pressed && styles.debugButtonPressed]}>
+          <Text style={styles.debugButtonLabel}>BACK</Text>
+        </Pressable>
+        <Pressable accessibilityLabel="Toggle color overlay" accessibilityRole="button" onPress={toggleColorOverlay} style={({ pressed }) => [styles.debugButton, pressed && styles.debugButtonPressed]}>
+          <Text style={styles.debugButtonLabel}>CLRS</Text>
+        </Pressable>
+        <Pressable accessibilityLabel="Toggle thumb overlay" accessibilityRole="button" onPress={toggleThumbOverlay} style={({ pressed }) => [styles.debugButton, pressed && styles.debugButtonPressed]}>
+          <Text style={styles.debugButtonLabel}>OVRL</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -168,5 +198,34 @@ const styles = StyleSheet.create({
     maxWidth: 190,
     paddingHorizontal: 2,
     paddingVertical: 1,
+  },
+  debugButton: {
+    backgroundColor: '#1A1A19',
+    borderColor: '#000000',
+    borderWidth: 2,
+    justifyContent: 'center',
+    minHeight: 34,
+    paddingHorizontal: 10,
+  },
+  debugButtonLabel: {
+    color: '#FFF9EF',
+    fontFamily: 'IBMPlexMono',
+    fontSize: typeScale.small,
+    fontWeight: '900',
+    letterSpacing: 0.2,
+  },
+  debugButtonLayer: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'flex-end',
+    justifyContent: 'flex-start',
+    paddingRight: 12,
+    zIndex: DEBUG_OVERLAY_Z_INDEX + 1,
+  },
+  debugButtonPressed: {
+    transform: [{ translateX: 1 }, { translateY: 1 }],
+  },
+  debugButtonRow: {
+    flexDirection: 'row',
+    gap: 8,
   },
 });

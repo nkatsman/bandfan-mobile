@@ -16,10 +16,15 @@ You are responsible for producing a verified BandFan mobile Android APK without 
 - DO keep Gradle cache on `D:\Android\GradleCache` when building.
 - DO keep npm cache on `D:\npm-cache` and temp on `D:\Android\Temp`.
 - DO generate the JS bundle manually with Expo before Gradle packaging.
+- DO use release env values only (no localhost/dev proxy/development app env in release).
+- DO provide release signing inputs through environment variables: `BANDFAN_UPLOAD_STORE_FILE`, `BANDFAN_UPLOAD_STORE_PASSWORD`, `BANDFAN_UPLOAD_KEY_ALIAS`, `BANDFAN_UPLOAD_KEY_PASSWORD`.
 - DO copy the final APK to `apps/mobile/builds/bandfan-mobile-pixel8pro-release.apk`.
 - DO keep `D:\bfm\app.json` aligned with `apps/mobile\app.json` before bundling.
 - DO ensure `D:\bfm\android\app\src\main\AndroidManifest.xml` includes any required Android permissions declared for the current mobile app, especially background audio permissions.
 - DO verify the final APK with `apksigner` and `aapt`.
+- DO verify release APKs are not debuggable and BandFan debug overlays are disabled unless the user explicitly requested a special debug-overlay build.
+- DO fail if `apksigner` shows Android Debug signer for a release APK.
+- DO fail if release bundle strings contain app API endpoints using `localhost` or `http://`.
 - DO report the APK path, byte size, package name, version, SDK levels, and signature status.
 - DO NOT commit changes, rebuild native Android structure, or modify source files unless explicitly requested.
 - DO NOT expose secret environment values.
@@ -29,10 +34,11 @@ You are responsible for producing a verified BandFan mobile Android APK without 
 2. Copy `apps/mobile/app`, `apps/mobile/src`, `apps/mobile/assets`, and `apps/mobile/app.json` into `D:\bfm`.
 3. Set `PATH` so `D:\tools\node-v20.19.5-win-x64` comes first.
 4. Confirm the short build copy's Android manifest contains required media playback permissions when the app needs background audio.
-5. From `D:\bfm`, run Expo `export:embed` for Android using `node_modules\expo-router\entry.js` and output to `android\app\build\generated\assets\createBundleReleaseJsAndAssets\index.android.bundle`.
-6. From `D:\bfm\android`, run `gradlew.bat :app:assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --console=plain -g D:\Android\GradleCache`.
-7. Copy `D:\bfm\android\app\build\outputs\apk\release\app-release.apk` to the repo build output path.
-8. Verify with the newest Android build-tools `apksigner.bat verify --verbose --print-certs` and `aapt.exe dump badging`.
+5. Confirm debug overlay controls are gated behind `__DEV__` before creating a release bundle.
+6. From `D:\bfm`, run Expo `export:embed` for Android using `node_modules\expo-router\entry.js` and output to `android\app\build\generated\assets\createBundleReleaseJsAndAssets\index.android.bundle`.
+7. From `D:\bfm\android`, run `gradlew.bat :app:assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --console=plain -g D:\Android\GradleCache`.
+8. Copy `D:\bfm\android\app\build\outputs\apk\release\app-release.apk` to the repo build output path.
+9. Verify with the newest Android build-tools `apksigner.bat verify --verbose --print-certs` and `aapt.exe dump badging`; confirm `application-debuggable` is absent.
 
 ## Emulator Launch Commands
 - Pixel 4a: `$env:ANDROID_AVD_HOME='D:\Android\Avd'; D:\Android\Sdk\emulator\emulator.exe -avd BandFan_Pixel_4a_API_36 -no-snapshot-save`

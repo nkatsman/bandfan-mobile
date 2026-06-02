@@ -112,12 +112,34 @@ Contract notes:
 
 - `GET /api/mobile/me`
   - returns current user profile summary, saved ids, voted ids, and lightweight app settings needed for bootstrap
-- `GET /api/mobile/liked`
-  - returns the current user's liked or saved songs in a mobile-ready list shape
+- `GET /api/mobile/bootstrap`
+  - returns the launch payload needed before first navigation: user/session summary, player settings, saved ids, voted ids, playlist summary, and Discover count metadata
+- `GET /api/mobile/discover/preview?limit=10&coverWarm=5`
+  - returns the total Discover count plus the first full song rows needed for a pleasant initial Discover render
+  - `coverWarm` is a client hint for the first cover-art URLs the backend or client should prioritize for cache warming; it must not change the song order
+- `GET /api/mobile/favorites/songs?limit=50&cursor=...`
+  - returns the current user's liked or saved songs with full mobile-ready song metadata, stable ordering, and pagination
+  - must include songs beyond the Discover feed window; Favorites must not be derived only from Discover results
+- `GET /api/mobile/voted/songs?limit=50&cursor=...`
+  - returns the current user's voted or release-supported songs with full mobile-ready song metadata, stable ordering, and pagination
+  - must include songs beyond the Discover feed window; Voted must not be derived only from Discover results
 - `GET /api/mobile/playlists`
   - returns built-in playlist definitions and contents for Discovery and Liked
 - `GET /api/mobile/account`
   - lightweight account settings payload focused on the mobile app
+
+## Progressive loading guidance
+
+For launch and long music lists:
+
+- keep the first visible payload small enough to render immediately, usually 8 to 12 full rows
+- warm the next 4 to 8 cover images after the first payload, not before the first screen can render
+- append later pages below the user's current viewport so visible rows do not reshuffle or resize
+- use stable ids and stable sort keys across pages
+- avoid replacing the entire list object when appending; merge by id and preserve existing row object identity where possible
+- do not change a row's artwork dimensions after it mounts; reserve fixed image slots and swap image contents only
+- start background cache work after first interaction frame or after the initial route is visible, then pause it while the user is actively scrolling
+- prefetch the next page when the user is around 60% to 80% through the loaded list, or when fewer than 8 to 12 rows remain below the viewport
 
 ## Contract principles
 

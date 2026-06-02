@@ -16,6 +16,7 @@ export const discoverySongsQueryDefaults = {
 } as const;
 const DISCOVERY_PAGE_LIMIT = 50;
 const DISCOVERY_MAX_PAGES = 4;
+const DISCOVERY_PREVIEW_LIMIT = 10;
 const discoveryRequestPromises = new Map<string, Promise<Song[]>>();
 
 const discoveryItemSchema = z
@@ -572,12 +573,27 @@ async function fetchDiscoverySongsPages(requestPath: string, status: ReturnType<
   return aggregatedSongs;
 }
 
+async function fetchDiscoverySongsFirstPage(requestPath: string, status: ReturnType<typeof useSessionStore.getState>['status'], options?: { includeAiAssisted?: boolean; limit?: number }) {
+  const params = new URLSearchParams({ limit: String(options?.limit ?? DISCOVERY_PREVIEW_LIMIT) });
+
+  if (options?.includeAiAssisted) {
+    params.set('includeAiAssisted', '1');
+  }
+
+  const response = await fetchDiscoverPage(`${requestPath}?${params.toString()}`, status);
+  return normalizeDiscoveryResponse(response);
+}
+
 export function fetchDiscoverySongs() {
   return fetchDiscoverySongsWithOptions();
 }
 
 export function fetchDiscoverySongsForPreferences(options: { includeAiAssisted?: boolean }) {
   return fetchDiscoverySongsWithOptions(options);
+}
+
+export function fetchDiscoverySongsPreviewForPreferences(options: { includeAiAssisted?: boolean; limit?: number }) {
+  return fetchDiscoverySongsFirstPage('/api/fan/discover/songs', useSessionStore.getState().status, options);
 }
 
 function readNestedValue(value: unknown, key: string) {

@@ -65,9 +65,9 @@ export function PlaylistsScreen() {
     ...userPlaylistsQueryDefaults,
   });
   const { refreshIndicator, ...pullToRefreshProps } = usePullToRefresh({
-    onRefresh: () => void playlistsQuery.refetch(),
+    onRefresh: () => playlistsQuery.refetch(),
     onScrollBeginDrag: () => setActiveMenuId(null),
-    refreshing: playlistsQuery.isRefetching,
+    refreshing: false,
   });
 
   const visibilityMutation = useMutation({

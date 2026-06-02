@@ -1,48 +1,37 @@
-import { useMemo } from 'react';
-import { StyleSheet, useWindowDimensions, View, type ViewStyle } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import Svg, { Defs, Pattern, Rect } from 'react-native-svg';
 
 import { useAppTheme } from '../design/theme';
 
 export function AppBackgroundPattern() {
-  const { height, width } = useWindowDimensions();
   const theme = useAppTheme();
-  const items = useMemo(() => buildPatternItems(width, height, theme.mode === 'dark'), [height, theme.mode, width]);
 
   return (
-    <View pointerEvents="none" style={styles.patternLayer}>
-      {items.map((itemStyle, index) => <View key={index} style={itemStyle} />)}
-    </View>
+    <AppBackgroundPatternTile isDark={theme.mode === 'dark'} />
   );
 }
 
-function buildPatternItems(screenWidth: number, screenHeight: number, isDark: boolean): ViewStyle[] {
-  if (isDark) {
-    const gap = 20;
-    const columns = Math.ceil(screenWidth / gap) + 1;
-    const rows = Math.ceil(screenHeight / gap) + 1;
+export function AppBackgroundPatternTile({ isDark }: { isDark: boolean }) {
+  const patternId = isDark ? 'bandfan-dark-dot-pattern' : 'bandfan-light-stripe-pattern';
 
-    return Array.from({ length: columns * rows }, (_, index) => ({
-      backgroundColor: 'rgba(255, 249, 239, 0.12)',
-      borderRadius: 1,
-      height: 2,
-      left: (index % columns) * gap + 1,
-      position: 'absolute',
-      top: Math.floor(index / columns) * gap + 1,
-      width: 2,
-    }));
-  }
-
-  const stripeCycle = 4;
-  const rows = Math.ceil(screenHeight / stripeCycle) + 1;
-
-  return Array.from({ length: rows }, (_, index) => ({
-    backgroundColor: 'rgba(34, 34, 32, 0.02)',
-    height: 2,
-    left: 0,
-    position: 'absolute',
-    right: 0,
-    top: index * stripeCycle,
-  }));
+  return (
+    <View pointerEvents="none" style={styles.patternLayer}>
+      <Svg height="100%" style={styles.patternSvg} width="100%">
+        <Defs>
+          {isDark ? (
+            <Pattern height={20} id={patternId} patternUnits="userSpaceOnUse" width={20} x={0} y={0}>
+              <Rect fill="rgba(255, 249, 239, 0.12)" height={2} rx={1} width={2} x={1} y={1} />
+            </Pattern>
+          ) : (
+            <Pattern height={4} id={patternId} patternUnits="userSpaceOnUse" width={4} x={0} y={0}>
+              <Rect fill="rgba(34, 34, 32, 0.02)" height={2} width={4} x={0} y={0} />
+            </Pattern>
+          )}
+        </Defs>
+        <Rect fill={`url(#${patternId})`} height="100%" width="100%" x={0} y={0} />
+      </Svg>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -50,5 +39,8 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     opacity: 1,
     zIndex: 0,
+  },
+  patternSvg: {
+    ...StyleSheet.absoluteFillObject,
   },
 });

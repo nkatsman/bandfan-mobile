@@ -14,7 +14,31 @@ let finishedSongId: string | null = null;
 let seekingUntil: number | null = null;
 let audioModeInitialized = false;
 let playIntentUntil: number | null = null;
+let playbackStateOverride: { isPlaying: boolean; until: number } | null = null;
 let activePlaybackLeaseId: string | null = null;
+let lastPlaybackProgressUpdateAt = 0;
+let ignoreNativeStatusUntil = 0;
+
+const PLAYBACK_PROGRESS_UPDATE_MS = 500;
+const PLAYBACK_STATE_OVERRIDE_MS = 900;
+const SOURCE_CHANGE_STATUS_IGNORE_MS = 900;
+
+function setPlaybackStateOverride(isPlaying: boolean) {
+  playbackStateOverride = { isPlaying, until: Date.now() + PLAYBACK_STATE_OVERRIDE_MS };
+}
+
+function readPlaybackStateOverride() {
+  if (!playbackStateOverride) {
+    return null;
+  }
+
+  if (Date.now() >= playbackStateOverride.until) {
+    playbackStateOverride = null;
+    return null;
+  }
+
+  return playbackStateOverride.isPlaying;
+}
 
 async function claimCurrentPlaybackLease(songId: string) {
   try {
@@ -46,6 +70,7 @@ function hasFreshPlayIntent() {
 
 function clearCurrentPlayback() {
   playIntentUntil = null;
+  playbackStateOverride = null;
   player?.pause();
   player?.clearLockScreenControls();
   playbackSongId = null;
@@ -79,15 +104,31 @@ function releaseCurrentPlayer() {
   }
 }
 
-async function resetNativeAudioBeforeNewSource() {
-  releaseCurrentPlayer();
-  await setIsAudioActiveAsync(false);
+async function prepareNativeAudioBeforeNewSource() {
+  player?.pause();
+  player?.clearLockScreenControls();
   await setIsAudioActiveAsync(true);
 }
 
 function handlePlaybackStatus(status: AudioStatus) {
+  const now = Date.now();
+
+  if (now < ignoreNativeStatusUntil) {
+    return;
+  }
+
+  const currentState = usePlayerStore.getState();
+
   if (!status.isLoaded) {
-    usePlayerStore.setState({ currentSeconds: 0, durationSeconds: 0, isLoading: Boolean(playbackSongId) || hasFreshPlayIntent(), isPlaying: hasFreshPlayIntent() });
+    const localPlaybackOverride = readPlaybackStateOverride();
+    const shouldKeepShowingPlaying = currentState.isPlaying && Boolean(currentState.activeSong);
+    usePlayerStore.setState({ currentSeconds: 0, durationSeconds: 0, isLoading: Boolean(playbackSongId) || hasFreshPlayIntent(), isPlaying: localPlaybackOverride ?? (hasFreshPlayIntent() || shouldKeepShowingPlaying) });
+    return;
+  }
+
+  if (status.didJustFinish && playbackSongId !== null && finishedSongId !== playbackSongId) {
+    finishedSongId = playbackSongId;
+    advanceAfterTrackFinish();
     return;
   }
 
@@ -95,7 +136,9 @@ function handlePlaybackStatus(status: AudioStatus) {
     playIntentUntil = null;
   }
 
-  const shouldShowPlaying = status.playing || hasFreshPlayIntent();
+  const localPlaybackOverride = readPlaybackStateOverride();
+  const shouldKeepShowingPlaying = currentState.isPlaying && Boolean(currentState.activeSong);
+  const shouldShowPlaying = localPlaybackOverride ?? (status.playing || hasFreshPlayIntent() || shouldKeepShowingPlaying);
 
   // Suppress progress updates while a programmatic seek is in-flight.
   if (seekingUntil !== null) {
@@ -111,18 +154,18 @@ function handlePlaybackStatus(status: AudioStatus) {
       ? Math.max(0, Math.min(100, (status.currentTime / status.duration) * 100))
       : 0;
 
-  usePlayerStore.setState((state) => ({
-    currentSeconds: status.currentTime,
-    durationSeconds: status.duration,
-    isLoading: status.isBuffering,
-    isMiniPlayerHidden: shouldShowPlaying && state.activeSong ? false : state.isMiniPlayerHidden,
-    isPlaying: shouldShowPlaying,
-    progressPercent,
-  }));
+  const shouldUpdateProgress = now - lastPlaybackProgressUpdateAt >= PLAYBACK_PROGRESS_UPDATE_MS || status.didJustFinish;
+  const shouldUpdatePlaybackState = currentState.isLoading !== status.isBuffering || currentState.isPlaying !== shouldShowPlaying;
 
-  if (status.didJustFinish && playbackSongId !== null && finishedSongId !== playbackSongId) {
-    finishedSongId = playbackSongId;
-    advanceAfterTrackFinish();
+  if (shouldUpdateProgress || shouldUpdatePlaybackState) {
+    lastPlaybackProgressUpdateAt = shouldUpdateProgress ? now : lastPlaybackProgressUpdateAt;
+    usePlayerStore.setState({
+      currentSeconds: shouldUpdateProgress ? status.currentTime : currentState.currentSeconds,
+      durationSeconds: shouldUpdateProgress ? status.duration : currentState.durationSeconds,
+      isLoading: status.isBuffering,
+      isPlaying: shouldShowPlaying,
+      progressPercent: shouldUpdateProgress ? progressPercent : currentState.progressPercent,
+    });
   }
 }
 
@@ -228,6 +271,8 @@ async function playSong(song: Song | null) {
         await player.seekTo(0);
       }
       if (pendingPlayId !== thisId) return;
+      setPlaybackStateOverride(true);
+      usePlayerStore.setState({ isLoading: false, isPlaying: true });
       player.play();
     } catch {
       usePlayerStore.setState({ isLoading: false, isPlaying: false });
@@ -237,13 +282,17 @@ async function playSong(song: Song | null) {
 
   try {
     playIntentUntil = Date.now() + 1200;
-    await resetNativeAudioBeforeNewSource();
+    await prepareNativeAudioBeforeNewSource();
     if (pendingPlayId !== thisId) return;
 
     await ensureAudioMode();
     if (pendingPlayId !== thisId) return;
 
     const p = getOrCreatePlayer();
+    ignoreNativeStatusUntil = Date.now() + SOURCE_CHANGE_STATUS_IGNORE_MS;
+    lastPlaybackProgressUpdateAt = 0;
+    setPlaybackStateOverride(true);
+    usePlayerStore.setState({ currentSeconds: 0, durationSeconds: 0, isLoading: false, isPlaying: true, progressPercent: 0 });
     p.replace({ uri: song.audioUrl });
     if (pendingPlayId !== thisId) return;
 
@@ -272,6 +321,7 @@ async function playSong(song: Song | null) {
 
 function pauseSong() {
   playIntentUntil = null;
+  setPlaybackStateOverride(false);
   player?.pause();
 }
 
@@ -498,12 +548,13 @@ export const usePlayerStore = create<PlayerState>((set) => ({
 
       if (state.isPlaying) {
         pauseSong();
-        return { isMiniPlayerHidden: false, isPlaying: false };
+        return { isLoading: false, isMiniPlayerHidden: false, isPlaying: false };
       }
 
       playIntentUntil = Date.now() + 1200;
+      setPlaybackStateOverride(true);
       void playSong(state.activeSong);
-      return { isLoading: true, isMiniPlayerHidden: false, isPlaying: true };
+      return { isLoading: false, isMiniPlayerHidden: false, isPlaying: true };
     }),
   toggleNormalization: () => set((state) => {
     const nextEnabled = !state.isNormalizationEnabled;

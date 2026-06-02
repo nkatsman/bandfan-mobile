@@ -7,11 +7,13 @@ import { useAppTheme } from '../design/theme';
 type SurfaceTone = 'card' | 'grouped' | 'accent' | 'player';
 
 type SurfaceCardProps = PropsWithChildren<{
+  backgroundColor?: string;
+  shadowVisible?: boolean;
   style?: StyleProp<ViewStyle>;
   tone?: SurfaceTone;
 }>;
 
-export function SurfaceCard({ children, style, tone = 'card' }: SurfaceCardProps) {
+export function SurfaceCard({ backgroundColor, children, shadowVisible = true, style, tone = 'card' }: SurfaceCardProps) {
   const theme = useAppTheme();
   const styles = useMemo(() => createStyles(theme.ui, theme.mode, tone), [theme, tone]);
   const backgrounds: Record<SurfaceTone, string> = {
@@ -23,8 +25,8 @@ export function SurfaceCard({ children, style, tone = 'card' }: SurfaceCardProps
 
   return (
     <View style={style}>
-      <View style={styles.shadow} />
-      <View style={[styles.card, { backgroundColor: backgrounds[tone] }]}>{children}</View>
+      {shadowVisible ? <View style={styles.shadow} /> : null}
+      <View style={[styles.card, { backgroundColor: backgroundColor ?? backgrounds[tone] }]}>{children}</View>
     </View>
   );
 }
@@ -41,7 +43,7 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui'], mode: Return
       top: 6,
     },
     card: {
-      borderColor: mode === 'dark' && tone === 'player' ? '#1A1A19' : colors.borderStrong,
+      borderColor: colors.borderStrong,
       borderRadius: radii.md,
       borderWidth: 3,
       padding: spacing.lg,

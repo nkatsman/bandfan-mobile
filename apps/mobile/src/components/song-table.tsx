@@ -1,5 +1,5 @@
-import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Animated, Easing, Image, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Animated, Easing, FlatList, Image, Modal, Pressable, StyleSheet, Text, TextInput, View, type FlatListProps, type ListRenderItemInfo, type StyleProp, type ViewStyle } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import HeartFilledIcon from '../../assets/Icons/poker-hearts-fill.svg';
@@ -29,12 +29,17 @@ import { formatLoadingText, useLoadingDots } from './use-loading-dots';
 import { BlockShadow, BlockShadowPressable } from './ui/block-shadow';
 
 type SongTableProps = {
+  contentContainerStyle?: StyleProp<ViewStyle>;
   controlsEnabled?: boolean;
   filterMode?: SongTableFilterMode;
   isLoading?: boolean;
+  isLoadingMore?: boolean;
   loadingDotCount?: number;
   hideLikeColumn?: boolean;
   hideVoteColumn?: boolean;
+  listFooterComponent?: ReactNode;
+  listHeaderComponent?: ReactNode;
+  listProps?: Partial<Omit<FlatListProps<Song>, 'data' | 'keyExtractor' | 'renderItem'>>;
   menuContext?: 'default' | 'favorites' | 'voted';
   likePendingForSong?: (songId: string) => boolean;
   onFilterModeChange?: (mode: SongTableFilterMode) => void;
@@ -42,6 +47,7 @@ type SongTableProps = {
   onSearchQueryChange?: (query: string) => void;
   votePendingForSong?: (songId: string) => boolean;
   searchQuery?: string;
+  showTableHeader?: boolean;
   sortMode?: SongTableSortMode;
   onSortModeChange?: (mode: SongTableSortMode) => void;
   onPlaySong: (song: Song) => void;
@@ -115,12 +121,17 @@ function getSortLabel(mode: SongTableSortMode) {
 }
 
 export function SongTable({
+  contentContainerStyle,
   controlsEnabled = false,
   filterMode = 'all',
   hideLikeColumn = false,
   hideVoteColumn = false,
   isLoading = false,
+  isLoadingMore = false,
   loadingDotCount,
+  listFooterComponent,
+  listHeaderComponent,
+  listProps,
   menuContext = 'default',
   likePendingForSong,
   onFilterModeChange,
@@ -130,6 +141,7 @@ export function SongTable({
   onToggleLikeSong,
   onToggleVoteSong,
   searchQuery = '',
+  showTableHeader = true,
   songs,
   sortMode = 'best-new',
   votePendingForSong,
@@ -152,7 +164,9 @@ export function SongTable({
   const [menuSongId, setMenuSongId] = useState<string | null>(null);
   const [menuView, setMenuView] = useState<'actions' | 'playlists'>('actions');
   const [statusInfo, setStatusInfo] = useState<{ description: string; label: string } | null>(null);
-  const internalLoadingDotCount = useLoadingDots(isLoading && loadingDotCount === undefined);
+  const [visibleSongIds, setVisibleSongIds] = useState<Set<string>>(() => new Set());
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 40 }).current;
+  const internalLoadingDotCount = useLoadingDots((isLoading || isLoadingMore) && loadingDotCount === undefined);
   const playlistsQuery = useQuery({
     enabled: Boolean(menuSongId && menuView === 'playlists'),
     queryFn: fetchUserPlaylists,
@@ -194,8 +208,158 @@ export function SongTable({
 
   const loadingText = formatLoadingText('L O A D I N G', loadingDotCount ?? internalLoadingDotCount);
 
-  return (
-    <View style={styles.table}>
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: Array<{ item?: Song }> }) => {
+    setVisibleSongIds(new Set(viewableItems.map((entry) => entry.item?.id).filter((songId): songId is string => Boolean(songId))));
+  }).current;
+
+  const renderSong = useCallback(({ index, item: song }: ListRenderItemInfo<Song>) => {
+    const likePending = likePendingForSong?.(song.id) ?? false;
+    const votePending = votePendingForSong?.(song.id) ?? false;
+    const badgeStyle = getStatusBadgeStyle(song.sourceLabel);
+    const isActiveSong = activeSong?.id === song.id;
+    const marqueeEnabled = visibleSongIds.size === 0 || visibleSongIds.has(song.id);
+
+    return (
+      <View style={[styles.row, index === 0 ? styles.rowFirst : styles.rowAfterFirst, menuSongId === song.id && styles.rowMenuOpen]}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => openMenu(song.id)}
+          style={({ pressed }) => [styles.moreCell, pressed && styles.pressed]}
+        >
+          <MoreVerticalIcon color={theme.ui.textPrimary} size={16} />
+        </Pressable>
+
+        <View style={styles.songPressArea}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              setMenuSongId(null);
+              onPlaySong(song);
+              openFullPlayer();
+            }}
+            style={({ pressed }) => [styles.songPressContent, pressed && styles.pressed]}
+          >
+            {song.coverArtUrl ? (
+              <Image source={{ uri: getCachedImageSrc(song.coverArtUrl) }} style={styles.artworkImage} />
+            ) : (
+              <View style={styles.artworkFallback}>
+                <CoverArtPlaceholder height="100%" width="100%" />
+              </View>
+            )}
+
+            <View style={styles.songCell}>
+              <View style={styles.songTitleRow}>
+                <View
+                  accessibilityLabel={`${getStatusDisplayLabel(song.sourceLabel)} status. ${getStatusDescription(song.sourceLabel)}`}
+                  style={[styles.statusDot, { backgroundColor: badgeStyle.fillColor }]}
+                />
+                <HoldToMarqueeText containerStyle={styles.songTitleSlot} enabled={marqueeEnabled} text={song.title} textStyle={styles.songTitle} />
+              </View>
+              <HoldToMarqueeText containerStyle={styles.songArtistSlot} enabled={marqueeEnabled} text={song.artist} textStyle={styles.songArtist} />
+            </View>
+          </Pressable>
+        </View>
+
+        {!hideVoteColumn ? (
+          <Pressable
+            accessibilityRole="button"
+            disabled={!onToggleVoteSong || votePending}
+            onPress={() => onToggleVoteSong?.(song)}
+            style={({ pressed }) => [styles.iconCell, styles.voteCell, pressed && styles.pressed]}
+          >
+            {song.voted ? <TriangleFilledIcon color={voteIconColor} height={20} width={20} /> : <TriangleOutlineIcon color={inactiveVoteIconColor} height={20} width={20} />}
+          </Pressable>
+        ) : null}
+
+        {!hideLikeColumn ? (
+          <Pressable
+            accessibilityRole="button"
+            disabled={!onToggleLikeSong || likePending}
+            onPress={() => onToggleLikeSong?.(song)}
+            style={({ pressed }) => [styles.iconCell, styles.likeCell, pressed && styles.pressed]}
+          >
+            {song.liked ? <HeartFilledIcon color={theme.ui.buttonLikeActive} height={22} width={22} /> : <HeartOutlineIcon color={inactiveLikeIconColor} height={22} width={22} />}
+          </Pressable>
+        ) : null}
+
+        <BlockShadowPressable
+          accessibilityRole="button"
+          contentStyle={styles.playCell}
+          onPress={() => {
+            if (isActiveSong) {
+              togglePlayback();
+              return;
+            }
+
+            onPlaySong(song);
+          }}
+          pressedContentStyle={styles.pressed}
+          shadowOffset={PLAY_CELL_SHADOW_OFFSET}
+          style={styles.playCellShadow}
+        >
+          {isActiveSong && isPlaying ? <PauseIcon color={LIGHT_PLAY_CONTROL_STROKE} height={30} width={30} /> : <PlayIcon color={LIGHT_PLAY_CONTROL_STROKE} height={34} width={34} />}
+        </BlockShadowPressable>
+
+        {menuSongId === song.id ? (
+          <PopupMenu style={styles.rowMenuShadow}>
+            {menuView === 'playlists' ? (
+              <>
+                <MenuAction icon={<ReturnIcon height={16} width={16} />} label="Go Back" onPress={() => setMenuView('actions')} styles={styles} />
+                {isPlaylistMenuLoading ? <PopupMenuEmpty>{formatLoadingText('Loading', playlistLoadingDotCount)}</PopupMenuEmpty> : null}
+                {!isPlaylistMenuLoading && userPlaylists.length === 0 ? <PopupMenuEmpty>No playlists yet.</PopupMenuEmpty> : null}
+                {!isPlaylistMenuLoading && userPlaylists.map((playlist) => {
+                  const alreadyAdded = playlist.trackIds.includes(song.id);
+
+                  return (
+                    <MenuAction
+                      key={playlist.id}
+                      disabled={alreadyAdded || addToPlaylistMutation.isPending}
+                      icon={alreadyAdded ? <CheckIcon height={16} width={16} /> : <PlaylistIcon height={16} width={16} />}
+                      label={playlist.title}
+                      onPress={() => {
+                        addToPlaylistMutation.mutate({ playlistId: playlist.id, songId: song.id });
+                        closeMenu();
+                      }}
+                      styles={styles}
+                    />
+                  );
+                })}
+              </>
+            ) : (
+              <>
+                <MenuAction icon={<PlaylistIcon height={16} width={16} />} label="Add to playlist" onPress={() => setMenuView('playlists')} styles={styles} />
+                <MenuAction icon={<PlayIcon height={16} width={16} />} label="Add to queue" onPress={() => { addSongToQueue(song); closeMenu(); }} styles={styles} />
+                {menuContext === 'favorites' ? (
+                  <MenuAction icon={<HeartFilledIcon color={theme.ui.buttonLikeActive} height={16} width={16} />} label="Remove from favorites" onPress={() => { onToggleLikeSong?.(song); closeMenu(); }} styles={styles} />
+                ) : (
+                  <MenuAction icon={song.liked ? <HeartFilledIcon color={theme.ui.buttonLikeActive} height={16} width={16} /> : <HeartOutlineIcon color={inactiveLikeIconColor} height={16} width={16} />} label={song.liked ? 'Remove from favorites' : 'Add to favorites'} onPress={() => { onToggleLikeSong?.(song); closeMenu(); }} styles={styles} />
+                )}
+                {menuContext !== 'voted' ? (
+                  <MenuAction icon={song.voted ? <TriangleFilledIcon color={voteIconColor} height={16} width={16} /> : <TriangleOutlineIcon color={inactiveVoteIconColor} height={16} width={16} />} label={song.voted ? 'Unvote' : 'Vote for release'} onPress={() => { onToggleVoteSong?.(song); closeMenu(); }} styles={styles} />
+                ) : null}
+                {SHOW_REPORT_ACTION ? <MenuAction icon={<FileTextIcon height={16} width={16} />} label="Report song" onPress={() => { closeMenu(); }} styles={styles} /> : null}
+              </>
+            )}
+          </PopupMenu>
+        ) : null}
+      </View>
+    );
+  }, [activeSong?.id, addSongToQueue, addToPlaylistMutation, closeMenu, hideLikeColumn, hideVoteColumn, inactiveLikeIconColor, inactiveVoteIconColor, isPlaying, isPlaylistMenuLoading, likePendingForSong, menuContext, menuSongId, menuView, onPlaySong, onToggleLikeSong, onToggleVoteSong, openFullPlayer, playlistLoadingDotCount, styles, theme.ui.buttonLikeActive, theme.ui.textPrimary, togglePlayback, userPlaylists, visibleSongIds, voteIconColor, votePendingForSong]);
+
+  const footer = (
+    <>
+      {listFooterComponent}
+      {isLoadingMore ? (
+        <View style={[styles.row, styles.rowAfterFirst, styles.loadingMoreRow]}>
+          <Text style={styles.loadingText}>{loadingText}</Text>
+        </View>
+      ) : null}
+    </>
+  );
+
+  const header = (
+    <>
+      {listHeaderComponent}
       {controlsEnabled ? (
         <View style={styles.controlsRow}>
           <View style={styles.searchShell}>
@@ -227,153 +391,54 @@ export function SongTable({
 
       {menuSongId ? <Pressable accessibilityLabel="Close song menu" accessibilityRole="button" onPress={closeMenu} style={styles.menuDismissLayer} /> : null}
 
-      <View style={styles.headerRow}>
-        <View style={styles.moreHeader} />
-        <View style={styles.artHeaderSpacer} />
-        <Text style={[styles.headerLabel, styles.songHeader]}>Song</Text>
-        {!hideVoteColumn ? <Text style={[styles.headerLabel, styles.voteHeader]}>Vote</Text> : null}
-        {!hideLikeColumn ? <Text style={[styles.headerLabel, styles.likeHeader]}>Like</Text> : null}
-        <Text style={[styles.headerLabel, styles.playHeader]}>Play</Text>
-      </View>
+      {showTableHeader ? (
+        <View style={styles.headerRow}>
+          <View style={styles.moreHeader} />
+          <View style={styles.artHeaderSpacer} />
+          <Text style={[styles.headerLabel, styles.songHeader]}>Song</Text>
+          {!hideVoteColumn ? <Text style={[styles.headerLabel, styles.voteHeader]}>Vote</Text> : null}
+          {!hideLikeColumn ? <Text style={[styles.headerLabel, styles.likeHeader]}>Like</Text> : null}
+          <Text style={[styles.headerLabel, styles.playHeader]}>Play</Text>
+        </View>
+      ) : null}
 
-      {isLoading ? (
+      {isLoading && showTableHeader ? (
         <View style={[styles.row, styles.rowFirst, styles.loadingRow]}>
           <Text style={styles.loadingText}>{loadingText}</Text>
         </View>
       ) : null}
+    </>
+  );
 
-      {!isLoading && songs.map((song, index) => {
-        const likePending = likePendingForSong?.(song.id) ?? false;
-        const votePending = votePendingForSong?.(song.id) ?? false;
-        const badgeStyle = getStatusBadgeStyle(song.sourceLabel);
-        const isActiveSong = activeSong?.id === song.id;
+  return (
+    <View style={styles.table}>
+      <FlatList
+        {...listProps}
+        CellRendererComponent={({ children, index, style, ...cellProps }) => {
+          const song = songs[index];
+          const isMenuOpen = Boolean(song && menuSongId === song.id);
 
-        return (
-          <View key={song.id} style={[styles.row, index === 0 ? styles.rowFirst : styles.rowAfterFirst, menuSongId === song.id && styles.rowMenuOpen]}>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => openMenu(song.id)}
-              style={({ pressed }) => [styles.moreCell, pressed && styles.pressed]}
-            >
-              <MoreVerticalIcon color={theme.ui.textPrimary} size={16} />
-            </Pressable>
-
-            <View style={styles.songPressArea}>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => {
-                  setMenuSongId(null);
-                  onPlaySong(song);
-                  openFullPlayer();
-                }}
-                style={({ pressed }) => [styles.songPressContent, pressed && styles.pressed]}
-              >
-                {song.coverArtUrl ? (
-                  <Image source={{ uri: getCachedImageSrc(song.coverArtUrl) }} style={styles.artworkImage} />
-                ) : (
-                  <View style={styles.artworkFallback}>
-                    <CoverArtPlaceholder height="100%" width="100%" />
-                  </View>
-                )}
-
-                <View style={styles.songCell}>
-                  <View style={styles.songTitleRow}>
-                    <View
-                      accessibilityLabel={`${getStatusDisplayLabel(song.sourceLabel)} status. ${getStatusDescription(song.sourceLabel)}`}
-                      style={[styles.statusDot, { backgroundColor: badgeStyle.fillColor }]}
-                    />
-                    <HoldToMarqueeText containerStyle={styles.songTitleSlot} text={song.title} textStyle={styles.songTitle} />
-                  </View>
-                  <HoldToMarqueeText containerStyle={styles.songArtistSlot} text={song.artist} textStyle={styles.songArtist} />
-                </View>
-              </Pressable>
+          return (
+            <View {...cellProps} style={[style, styles.listCell, isMenuOpen && styles.listCellMenuOpen]}>
+              {children}
             </View>
-
-            {!hideVoteColumn ? (
-              <Pressable
-                accessibilityRole="button"
-                disabled={!onToggleVoteSong || votePending}
-                onPress={() => onToggleVoteSong?.(song)}
-                style={({ pressed }) => [styles.iconCell, styles.voteCell, pressed && styles.pressed]}
-              >
-                {song.voted ? <TriangleFilledIcon color={voteIconColor} height={20} width={20} /> : <TriangleOutlineIcon color={inactiveVoteIconColor} height={20} width={20} />}
-              </Pressable>
-            ) : null}
-
-            {!hideLikeColumn ? (
-              <Pressable
-                accessibilityRole="button"
-                disabled={!onToggleLikeSong || likePending}
-                onPress={() => onToggleLikeSong?.(song)}
-                style={({ pressed }) => [styles.iconCell, styles.likeCell, pressed && styles.pressed]}
-              >
-                {song.liked ? <HeartFilledIcon color={theme.ui.buttonLikeActive} height={22} width={22} /> : <HeartOutlineIcon color={inactiveLikeIconColor} height={22} width={22} />}
-              </Pressable>
-            ) : null}
-
-            <BlockShadowPressable
-              accessibilityRole="button"
-              contentStyle={styles.playCell}
-              onPress={() => {
-                if (isActiveSong) {
-                  togglePlayback();
-                  return;
-                }
-
-                onPlaySong(song);
-              }}
-              pressedContentStyle={styles.pressed}
-              shadowOffset={PLAY_CELL_SHADOW_OFFSET}
-              style={styles.playCellShadow}
-            >
-              {isActiveSong && isPlaying ? <PauseIcon color={LIGHT_PLAY_CONTROL_STROKE} height={30} width={30} /> : <PlayIcon color={LIGHT_PLAY_CONTROL_STROKE} height={34} width={34} />}
-            </BlockShadowPressable>
-
-            {menuSongId === song.id ? (
-              <PopupMenu style={styles.rowMenuShadow}>
-                {menuView === 'playlists' ? (
-                  <>
-                    <MenuAction icon={<ReturnIcon height={16} width={16} />} label="Go Back" onPress={() => setMenuView('actions')} styles={styles} />
-                    {isPlaylistMenuLoading ? <PopupMenuEmpty>{formatLoadingText('Loading', playlistLoadingDotCount)}</PopupMenuEmpty> : null}
-                    {!isPlaylistMenuLoading && userPlaylists.length === 0 ? <PopupMenuEmpty>No playlists yet.</PopupMenuEmpty> : null}
-                    {!isPlaylistMenuLoading && userPlaylists.map((playlist) => {
-                      const alreadyAdded = playlist.trackIds.includes(song.id);
-
-                      return (
-                        <MenuAction
-                          key={playlist.id}
-                          disabled={alreadyAdded || addToPlaylistMutation.isPending}
-                          icon={alreadyAdded ? <CheckIcon height={16} width={16} /> : <PlaylistIcon height={16} width={16} />}
-                          label={playlist.title}
-                          onPress={() => {
-                            addToPlaylistMutation.mutate({ playlistId: playlist.id, songId: song.id });
-                            closeMenu();
-                          }}
-                          styles={styles}
-                        />
-                      );
-                    })}
-                  </>
-                ) : (
-                  <>
-                    <MenuAction icon={<PlaylistIcon height={16} width={16} />} label="Add to playlist" onPress={() => setMenuView('playlists')} styles={styles} />
-                    <MenuAction icon={<PlayIcon height={16} width={16} />} label="Add to queue" onPress={() => { addSongToQueue(song); closeMenu(); }} styles={styles} />
-                    {menuContext === 'favorites' ? (
-                      <MenuAction icon={<HeartFilledIcon color={theme.ui.buttonLikeActive} height={16} width={16} />} label="Remove from favorites" onPress={() => { onToggleLikeSong?.(song); closeMenu(); }} styles={styles} />
-                    ) : (
-                      <MenuAction icon={song.liked ? <HeartFilledIcon color={theme.ui.buttonLikeActive} height={16} width={16} /> : <HeartOutlineIcon color={inactiveLikeIconColor} height={16} width={16} />} label={song.liked ? 'Remove from favorites' : 'Add to favorites'} onPress={() => { onToggleLikeSong?.(song); closeMenu(); }} styles={styles} />
-                    )}
-                    {menuContext !== 'voted' ? (
-                      <MenuAction icon={song.voted ? <TriangleFilledIcon color={voteIconColor} height={16} width={16} /> : <TriangleOutlineIcon color={inactiveVoteIconColor} height={16} width={16} />} label={song.voted ? 'Unvote' : 'Vote for release'} onPress={() => { onToggleVoteSong?.(song); closeMenu(); }} styles={styles} />
-                    ) : null}
-                    {SHOW_REPORT_ACTION ? <MenuAction icon={<FileTextIcon height={16} width={16} />} label="Report song" onPress={() => { closeMenu(); }} styles={styles} /> : null}
-                  </>
-                )}
-              </PopupMenu>
-            ) : null}
-          </View>
-        );
-      })}
+          );
+        }}
+        contentContainerStyle={[styles.listContent, contentContainerStyle]}
+        data={isLoading ? [] : songs}
+        initialNumToRender={10}
+        keyExtractor={(song) => song.id}
+        ListFooterComponent={footer}
+        ListHeaderComponent={header}
+        maxToRenderPerBatch={8}
+        onViewableItemsChanged={onViewableItemsChanged}
+        overScrollMode="never"
+        removeClippedSubviews={false}
+        renderItem={renderSong}
+        updateCellsBatchingPeriod={48}
+        viewabilityConfig={viewabilityConfig}
+        windowSize={7}
+      />
 
       <Modal animationType="fade" onRequestClose={() => setStatusInfo(null)} transparent visible={Boolean(statusInfo)}>
         <View style={styles.statusModalRoot}>
@@ -392,7 +457,7 @@ function MenuAction({ disabled = false, icon, label, onPress }: { disabled?: boo
   return <PopupMenuItem disabled={disabled} icon={icon} label={label} onPress={onPress} />;
 }
 
-function HoldToMarqueeText({ containerStyle, text, textStyle }: { containerStyle?: object; text: string; textStyle: object }) {
+function HoldToMarqueeText({ containerStyle, enabled, text, textStyle }: { containerStyle?: object; enabled: boolean; text: string; textStyle: object }) {
   const [containerWidth, setContainerWidth] = useState(0);
   const [textWidth, setTextWidth] = useState(0);
   const overflowWidth = containerWidth > 0 && textWidth > 0 ? Math.max(0, textWidth - containerWidth) : 0;
@@ -400,7 +465,7 @@ function HoldToMarqueeText({ containerStyle, text, textStyle }: { containerStyle
   const loopRef = useRef<Animated.CompositeAnimation | null>(null);
 
   useEffect(() => {
-    if (overflowWidth <= 0) {
+    if (!enabled || overflowWidth <= 0) {
       loopRef.current?.stop();
       loopRef.current = null;
       translateX.stopAnimation();
@@ -411,13 +476,20 @@ function HoldToMarqueeText({ containerStyle, text, textStyle }: { containerStyle
     const duration = Math.max(1300, overflowWidth * 28);
     const animation = Animated.loop(
       Animated.sequence([
+        Animated.delay(500),
         Animated.timing(translateX, {
           duration,
           easing: Easing.linear,
           toValue: -overflowWidth,
           useNativeDriver: true,
         }),
-        Animated.delay(220),
+        Animated.delay(700),
+        Animated.timing(translateX, {
+          duration: 360,
+          easing: Easing.out(Easing.quad),
+          toValue: 0,
+          useNativeDriver: true,
+        }),
       ]),
     );
 
@@ -429,15 +501,22 @@ function HoldToMarqueeText({ containerStyle, text, textStyle }: { containerStyle
       loopRef.current = null;
       translateX.setValue(0);
     };
-  }, [overflowWidth, translateX]);
+  }, [enabled, overflowWidth, translateX]);
 
   return (
     <View style={[sharedStyles.marqueePressArea, containerStyle]}>
-      <Text accessible={false} onLayout={(event) => setTextWidth(event.nativeEvent.layout.width)} style={[textStyle, sharedStyles.marqueeMeasure]}>{text}</Text>
-      <View onLayout={(event) => setContainerWidth(event.nativeEvent.layout.width)} style={sharedStyles.marqueeViewport}>
-        <Animated.Text numberOfLines={1} style={[textStyle, sharedStyles.marqueeText, { transform: [{ translateX }] }]}> 
+      {enabled ? (
+        <Text
+          accessible={false}
+          numberOfLines={1}
+          onTextLayout={(event) => setTextWidth(event.nativeEvent.lines[0]?.width ?? 0)}
+          style={[textStyle, sharedStyles.marqueeMeasure]}
+        >
           {text}
-        </Animated.Text>
+        </Text>
+      ) : null}
+      <View onLayout={(event) => setContainerWidth(event.nativeEvent.layout.width)} style={sharedStyles.marqueeViewport}>
+        <Animated.Text numberOfLines={1} style={[textStyle, sharedStyles.marqueeText, { transform: [{ translateX }] }]}>{text}</Animated.Text>
       </View>
     </View>
   );
@@ -452,6 +531,7 @@ const sharedStyles = StyleSheet.create({
     flexShrink: 0,
   },
   marqueeMeasure: {
+    flexShrink: 0,
     opacity: 0,
     position: 'absolute',
   },
@@ -575,6 +655,7 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
       borderColor: isDark ? DARK_BORDER_COLOR : ui.borderStrong,
       borderWidth: 2,
       flexDirection: 'row',
+      marginHorizontal: spacing.sm,
       minHeight: 64,
       paddingHorizontal: ROW_SIDE_GAP,
       paddingVertical: spacing.xs,
@@ -592,6 +673,7 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
       borderWidth: 2,
     },
     rowMenuShadow: {
+      elevation: THREE_DOT_MENU_Z_INDEX,
       left: ROW_SIDE_GAP + 2,
       minWidth: 196,
       position: 'absolute',
@@ -599,6 +681,7 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
       zIndex: THREE_DOT_MENU_Z_INDEX,
     },
     rowMenuOpen: {
+      elevation: THREE_DOT_MENU_Z_INDEX,
       zIndex: THREE_DOT_MENU_Z_INDEX,
     },
     rowMenuAction: {
@@ -693,6 +776,10 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
       justifyContent: 'center',
       minHeight: 96,
     },
+    loadingMoreRow: {
+      justifyContent: 'center',
+      minHeight: 64,
+    },
     loadingText: {
       color: ui.textSecondary,
       fontFamily: 'IBMPlexMono',
@@ -739,9 +826,20 @@ function createStyles(theme: ReturnType<typeof useAppTheme>) {
       marginLeft: TABLE_INLINE_GAP,
     },
     table: {
-      paddingHorizontal: spacing.sm,
+      flex: 1,
       overflow: 'visible',
       position: 'relative',
+    },
+    listContent: {
+      overflow: 'visible',
+    },
+    listCell: {
+      overflow: 'visible',
+      zIndex: 0,
+    },
+    listCellMenuOpen: {
+      elevation: THREE_DOT_MENU_Z_INDEX,
+      zIndex: THREE_DOT_MENU_Z_INDEX,
     },
     menuDismissLayer: {
       bottom: -1000,

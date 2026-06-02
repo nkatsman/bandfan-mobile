@@ -75,8 +75,8 @@ export function DsCard({ children, fixedHeight, reserveShadowSize, shadowSize = 
       <View
         style={{
           backgroundColor: isDark ? theme.ui.surfaceCard : DS.color.cardSurface,
-          borderColor: isDark ? '#1A1A19' : DS.stroke.color,
-          borderWidth: DS.stroke.thick,
+          borderColor: isDark ? theme.ui.borderStrong : DS.stroke.color,
+          borderWidth: 3,
           width,
           height: fixedHeight,
           overflow: 'hidden',

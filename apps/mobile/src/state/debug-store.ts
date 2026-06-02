@@ -21,6 +21,11 @@ export const useDebugStore = create<DebugState>((set) => ({
   colorOverlayMode: 'off',
   debugModeEnabled: false,
   hydrateDebugMode: async () => {
+    if (!__DEV__) {
+      set(() => ({ debugModeEnabled: false, thumbOverlayVisible: false }));
+      return;
+    }
+
     try {
       const storedMode = await AsyncStorage.getItem(debugModeStorageKey);
       const enabled = storedMode === 'on';
@@ -34,7 +39,7 @@ export const useDebugStore = create<DebugState>((set) => ({
     }
   },
   setDebugModeEnabled: (enabled) => {
-    const nextEnabled = enabled;
+    const nextEnabled = __DEV__ && enabled;
     set(() => ({
       debugModeEnabled: nextEnabled,
       colorOverlayMode: nextEnabled ? 'off' : 'off',

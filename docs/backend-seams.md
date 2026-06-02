@@ -35,7 +35,7 @@ That is mobile-friendly. A mobile client can sign in with Firebase Auth, retriev
 ## Likely backend cleanup needed for mobile
 
 - current-user bootstrap endpoint for mobile app startup
-- dedicated liked-songs read endpoint if the current web path is too indirect
+- dedicated liked/favorites and voted song read endpoints with full mobile-ready song metadata and pagination; Favorites and Voted must not depend on the limited Discover feed
 - mobile-friendly playlist read/write contract
 - normalization of response payload shapes across fan APIs
 - explicit image/audio URL handling rules for mobile clients

@@ -22,6 +22,7 @@ import SkipForwardIcon from '../../../assets/Icons/skip-forward-fill.svg';
 import SparklingIcon from '../../../assets/Icons/sparkling-line.svg';
 import TriangleFilledIcon from '../../../assets/Icons/triangle-fill.svg';
 import TriangleOutlineIcon from '../../../assets/Icons/triangle-line.svg';
+import { AppBackgroundPatternTile } from '../../components/app-background-pattern';
 import { BottomMenu } from '../../components/ui/bottom-menu';
 import { BlockShadowPressable } from '../../components/ui/block-shadow';
 import { PopupMenu, PopupMenuEmpty, PopupMenuItem } from '../../components/ui/popup-menu';
@@ -111,7 +112,6 @@ export function FullPlayerPanel({ includeBottomMenu = false, onCollapse, onNavig
   const { isSongReleaseSupportPending, toggleSongReleaseSupport } = useSongReleaseSupportAction();
   const [isPlaylistMenuOpen, setPlaylistMenuOpen] = useState(false);
   const styles = useMemo(() => createStyles(theme.ui, theme.mode, screenWidth, screenHeight, insets.top), [insets.top, screenHeight, screenWidth, theme]);
-  const backgroundPatternItems = useMemo(() => buildPlayerPatternItems(screenWidth, screenHeight, theme.mode === 'dark'), [screenHeight, screenWidth, theme.mode]);
   const badgeStyle = activeSong ? getStatusBadgeStyle(activeSong.sourceLabel) : null;
   const elapsedLabel = activeSong ? formatSeconds(currentSeconds) : '00:00';
   const durationLabel = activeSong ? formatSeconds(durationSeconds || parseDurationLabel(activeSong.durationLabel)) : '00:00';
@@ -179,9 +179,16 @@ export function FullPlayerPanel({ includeBottomMenu = false, onCollapse, onNavig
       return;
     }
 
+    const pageX = event.nativeEvent?.pageX;
+    const pageY = event.nativeEvent?.pageY;
+
+    if (typeof pageX !== 'number' || typeof pageY !== 'number') {
+      return;
+    }
+
     dragTranslateY.stopAnimation();
-    dragStartXRef.current = event.nativeEvent.pageX;
-    dragStartYRef.current = event.nativeEvent.pageY;
+    dragStartXRef.current = pageX;
+    dragStartYRef.current = pageY;
     dragCurrentYRef.current = 0;
     dragActiveRef.current = false;
   }
@@ -191,8 +198,15 @@ export function FullPlayerPanel({ includeBottomMenu = false, onCollapse, onNavig
       return;
     }
 
-    const dx = event.nativeEvent.pageX - dragStartXRef.current;
-    const dy = event.nativeEvent.pageY - dragStartYRef.current;
+    const pageX = event.nativeEvent?.pageX;
+    const pageY = event.nativeEvent?.pageY;
+
+    if (typeof pageX !== 'number' || typeof pageY !== 'number') {
+      return;
+    }
+
+    const dx = pageX - dragStartXRef.current;
+    const dy = pageY - dragStartYRef.current;
 
     if (dy <= 0) {
       return;
@@ -314,7 +328,7 @@ export function FullPlayerPanel({ includeBottomMenu = false, onCollapse, onNavig
       style={styles.page}
     >
       <View pointerEvents="none" style={styles.backgroundPattern}>
-        {backgroundPatternItems.map((itemStyle, index) => <View key={index} style={itemStyle} />)}
+        <AppBackgroundPatternTile isDark={theme.mode === 'dark'} />
       </View>
       {isPlaylistMenuOpen ? <Pressable accessibilityLabel="Close playlist menu" accessibilityRole="button" onPress={() => setPlaylistMenuOpen(false)} style={styles.dismissLayer} /> : null}
 
@@ -700,32 +714,3 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui'], mode: Return
   });
 }
 
-function buildPlayerPatternItems(screenWidth: number, screenHeight: number, isDark: boolean): ViewStyle[] {
-  if (isDark) {
-    const gap = 20;
-    const columns = Math.ceil(screenWidth / gap) + 1;
-    const rows = Math.ceil(screenHeight / gap) + 1;
-
-    return Array.from({ length: columns * rows }, (_, index) => ({
-      backgroundColor: 'rgba(255, 249, 239, 0.12)',
-      borderRadius: 1,
-      height: 2,
-      left: (index % columns) * gap + 1,
-      position: 'absolute',
-      top: Math.floor(index / columns) * gap + 1,
-      width: 2,
-    }));
-  }
-
-  const stripeCycle = 4;
-  const rows = Math.ceil(screenHeight / stripeCycle) + 1;
-
-  return Array.from({ length: rows }, (_, index) => ({
-    backgroundColor: 'rgba(34, 34, 32, 0.02)',
-    height: 2,
-    left: 0,
-    position: 'absolute',
-    right: 0,
-    top: index * stripeCycle,
-  }));
-}

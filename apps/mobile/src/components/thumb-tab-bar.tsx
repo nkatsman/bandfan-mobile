@@ -7,17 +7,19 @@ import { MiniPlayer } from './mini-player';
 import { BottomMenuModule } from '../modules/bottom-menu';
 import { useAppTheme } from '../design/theme';
 import { usePlayerStore } from '../state/player-store';
+import { useKeyboardInset } from './use-keyboard-inset';
 
 const MINI_PLAYER_Z_INDEX = 6000;
 
 export function ThumbTabBar({ descriptors, navigation, state }: BottomTabBarProps) {
   const theme = useAppTheme();
   const isMiniPlayerHidden = usePlayerStore((state) => state.isMiniPlayerHidden);
+  const keyboardInset = useKeyboardInset();
   const styles = useMemo(() => createStyles(theme.ui, theme.uiSpacing), [theme]);
 
   return (
     <View style={styles.safeArea}>
-      <View style={[styles.playerWrap, isMiniPlayerHidden && styles.playerWrapHidden]}>
+      <View style={[styles.playerWrap, isMiniPlayerHidden && styles.playerWrapHidden, keyboardInset > 0 && { marginBottom: keyboardInset }]}>
         <MiniPlayer compact />
       </View>
 

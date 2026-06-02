@@ -20,8 +20,8 @@ These should be resolved explicitly instead of being decided implicitly during i
 
 ## Technical
 
-- Do liked songs need a dedicated endpoint before UI work begins?
-- Is a dedicated `/api/mobile/me` bootstrap route worth adding before the first client pass?
+- Resolved direction: liked/favorites and voted songs need dedicated mobile metadata endpoints before they can be complete on mobile. They must not depend on the limited Discover feed.
+- Resolved direction: add a dedicated mobile bootstrap or Discover preview route so launch can show Discover with count metadata, the first rows, and a small cover-art warmup before background list/cache work continues.
 - The discovery route itself is now wired, but its response envelope is still not explicitly documented. The mobile client currently accepts a small set of array-or-envelope variants and requires each item to expose an id, title, and artist. If the deployed backend differs, prefer an additive documented contract rather than looser client-side guessing.
 - Live validation confirmed the deployed `POST /api/fan/preferences` route currently expects `{ kind: 'save-song', targetId, value }`. If a more mobile-friendly `{ songId, liked }` contract is still desired, it should be added as an additive server contract rather than inferred client-side.
 - Live validation confirmed the deployed `POST /api/release-support` route accepts `{ songId, supported }`, but the current response uses `releaseSupported` rather than the earlier assumed `supported` echo.

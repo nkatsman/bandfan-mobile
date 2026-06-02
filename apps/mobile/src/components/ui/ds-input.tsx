@@ -9,6 +9,7 @@
  * Gap below label: DS.layout.fieldLabelGap (7px)
  */
 
+import { forwardRef } from 'react';
 import { StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
 
 import { DS } from '../../design/ds';
@@ -21,7 +22,7 @@ type DsInputProps = TextInputProps & {
   stackGap?: number;
 };
 
-export function DsInput({ label, stackGap = 0, style, ...inputProps }: DsInputProps) {
+export const DsInput = forwardRef<TextInput, DsInputProps>(function DsInput({ label, stackGap = 0, style, ...inputProps }, ref) {
   const theme = useAppTheme();
   const isDark = theme.mode === 'dark';
   const placeholderTextColor = inputProps.placeholderTextColor ?? (isDark ? '#6EA06E' : '#8F8F8F');
@@ -32,12 +33,13 @@ export function DsInput({ label, stackGap = 0, style, ...inputProps }: DsInputPr
       <TextInput
         autoCapitalize="none"
         placeholderTextColor={placeholderTextColor}
+        ref={ref}
         {...inputProps}
         style={[styles.input, isDark && styles.inputDark, style]}
       />
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   wrap: {},

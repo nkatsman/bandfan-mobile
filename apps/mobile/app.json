@@ -22,6 +22,7 @@
     "android": {
       "package": "space.bandfan.mobile",
       "permissions": [
+        "INTERNET",
         "WAKE_LOCK",
         "FOREGROUND_SERVICE",
         "FOREGROUND_SERVICE_MEDIA_PLAYBACK"

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
 
 import { AppBackgroundPattern } from '../../components/app-background-pattern';
 import { AppSidebar } from '../../components/app-sidebar';
@@ -10,6 +10,7 @@ import { MusicPreferenceControls } from '../../components/music-preference-contr
 import { ScreenHeader } from '../../components/screen-header';
 import { SongTable, type SongTableFilterMode, type SongTableSortMode } from '../../components/song-table';
 import { BottomMenu } from '../../components/ui/bottom-menu';
+import { useKeyboardInset } from '../../components/use-keyboard-inset';
 import { formatLoadingText, useLoadingDots } from '../../components/use-loading-dots';
 import { usePullToRefresh } from '../../components/use-pull-to-refresh';
 import { DS } from '../../design/ds';
@@ -53,6 +54,7 @@ export function PlaylistDetailScreen({ playlistId }: PlaylistDetailScreenProps) 
   const [filterMode, setFilterMode] = useState<SongTableFilterMode>('all');
   const [sortMode, setSortMode] = useState<SongTableSortMode>('votes-desc');
   const [sidebarVisible, setSidebarVisible] = useState(false);
+  const keyboardInset = useKeyboardInset();
   const styles = useMemo(() => createStyles(theme.ui), [theme.ui]);
 
   const discoveryQuery = useQuery({
@@ -68,13 +70,15 @@ export function PlaylistDetailScreen({ playlistId }: PlaylistDetailScreenProps) 
   });
   const { refreshIndicator, ...pullToRefreshProps } = usePullToRefresh({
     onRefresh: () => {
-      void playlistsQuery.refetch();
+      const requests: Array<Promise<unknown>> = [playlistsQuery.refetch()];
 
       if (hasApiBaseUrl) {
-        void discoveryQuery.refetch();
+        requests.push(discoveryQuery.refetch().then(() => undefined));
       }
+
+      return Promise.all(requests);
     },
-    refreshing: playlistsQuery.isRefetching || discoveryQuery.isRefetching,
+    refreshing: false,
   });
 
   useEffect(() => {
@@ -144,14 +148,27 @@ export function PlaylistDetailScreen({ playlistId }: PlaylistDetailScreenProps) 
     return (
       <View style={styles.root}>
         <AppBackgroundPattern />
-        <ScrollView {...pullToRefreshProps} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} style={styles.scrollArea}>
-          {refreshIndicator}
-          <ScreenHeader counter={playlistsQuery.isLoading ? formatLoadingText('Loading', loadingDotCount) : 'Playlist not found.'} onLogoPress={() => setSidebarVisible(true)} title="Playlist" verticalOffset={HEADER_CENTER_OFFSET} />
+        <SongTable
+          contentContainerStyle={styles.content}
+          listHeaderComponent={(
+            <>
+              {refreshIndicator}
+              <ScreenHeader counter={playlistsQuery.isLoading ? formatLoadingText('Loading', loadingDotCount) : 'Playlist not found.'} onLogoPress={() => setSidebarVisible(true)} title="Playlist" verticalOffset={HEADER_CENTER_OFFSET} />
 
-          <View style={styles.musicControlsShelf}>
-            <MusicPreferenceControls layout="fill" showNormalization={false} />
-          </View>
-        </ScrollView>
+              <View style={styles.musicControlsShelf}>
+                <MusicPreferenceControls layout="fill" showNormalization={false} />
+              </View>
+            </>
+          )}
+          listProps={{
+            ...pullToRefreshProps,
+            showsVerticalScrollIndicator: false,
+            style: styles.scrollArea,
+          }}
+          onPlaySong={() => undefined}
+          showTableHeader={false}
+          songs={[]}
+        />
         <AppSidebar onClose={() => setSidebarVisible(false)} visible={sidebarVisible} />
       </View>
     );
@@ -160,58 +177,54 @@ export function PlaylistDetailScreen({ playlistId }: PlaylistDetailScreenProps) 
   return (
     <View style={styles.root}>
       <AppBackgroundPattern />
-      <ScrollView {...pullToRefreshProps} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} style={styles.scrollArea}>
-        {refreshIndicator}
-        <ScreenHeader counter={isSongsLoading ? formatLoadingText('Loading', loadingDotCount) : `${playlistSongs.length} songs in this playlist`} description={playlist.description} onLogoPress={() => setSidebarVisible(true)} title={playlist.title} verticalOffset={HEADER_CENTER_OFFSET} />
-
-        <View style={styles.musicControlsShelf}>
-          <MusicPreferenceControls layout="fill" showNormalization={false} />
-        </View>
-
-        {likeErrorMessage ? (
+      <SongTable
+        contentContainerStyle={styles.content}
+        hideVoteColumn={playlist.id === 'voted'}
+        isLoading={isSongsLoading}
+        listHeaderComponent={(
           <>
-            <Text style={styles.sectionTitle}>Save Error</Text>
-            <Text style={styles.copy}>{likeErrorMessage}</Text>
+            {refreshIndicator}
+            <ScreenHeader counter={isSongsLoading ? formatLoadingText('Loading', loadingDotCount) : `${playlistSongs.length} songs in this playlist`} description={playlist.description} onLogoPress={() => setSidebarVisible(true)} title={playlist.title} verticalOffset={HEADER_CENTER_OFFSET} />
+
+            <View style={styles.musicControlsShelf}>
+              <MusicPreferenceControls layout="fill" showNormalization={false} />
+            </View>
+
+            {likeErrorMessage ? (
+              <>
+                <Text style={styles.sectionTitle}>Save Error</Text>
+                <Text style={styles.copy}>{likeErrorMessage}</Text>
+              </>
+            ) : null}
+
+            {releaseSupportErrorMessage ? (
+              <>
+                <Text style={styles.sectionTitle}>Release Support Error</Text>
+                <Text style={styles.copy}>{releaseSupportErrorMessage}</Text>
+              </>
+            ) : null}
+
+            {!isSongsLoading && viewSongs.length === 0 ? <Text style={styles.sectionTitle}>No Songs Here</Text> : null}
           </>
-        ) : null}
+        )}
+        listProps={{
+          ...pullToRefreshProps,
+          showsVerticalScrollIndicator: false,
+          style: styles.scrollArea,
+        }}
+        loadingDotCount={loadingDotCount}
+        likePendingForSong={isSongLikePending}
+        menuContext={playlist.id === 'voted' ? 'voted' : 'default'}
+        onPlaySong={(song) => playSelection(viewSongs, song.id, playlist.title.toUpperCase())}
+        onToggleLikeSong={toggleSongLike}
+        onToggleVoteSong={toggleSongReleaseSupport}
+        showTableHeader={isSongsLoading || viewSongs.length > 0}
+        songs={isSongsLoading ? [] : viewSongs}
+        votePendingForSong={isSongReleaseSupportPending}
+      />
 
-        {releaseSupportErrorMessage ? (
-          <>
-            <Text style={styles.sectionTitle}>Release Support Error</Text>
-            <Text style={styles.copy}>{releaseSupportErrorMessage}</Text>
-          </>
-        ) : null}
-
-        {isSongsLoading ? (
-          <SongTable
-            hideVoteColumn={playlist.id === 'voted'}
-            isLoading
-            loadingDotCount={loadingDotCount}
-            likePendingForSong={isSongLikePending}
-            menuContext={playlist.id === 'voted' ? 'voted' : 'default'}
-            onPlaySong={(song) => playSelection(viewSongs, song.id, playlist.title.toUpperCase())}
-            onToggleLikeSong={toggleSongLike}
-            onToggleVoteSong={toggleSongReleaseSupport}
-            songs={[]}
-            votePendingForSong={isSongReleaseSupportPending}
-          />
-        ) : viewSongs.length > 0 ? (
-          <SongTable
-            hideVoteColumn={playlist.id === 'voted'}
-            likePendingForSong={isSongLikePending}
-            menuContext={playlist.id === 'voted' ? 'voted' : 'default'}
-            onPlaySong={(song) => playSelection(viewSongs, song.id, playlist.title.toUpperCase())}
-            onToggleLikeSong={toggleSongLike}
-            onToggleVoteSong={toggleSongReleaseSupport}
-            songs={viewSongs}
-            votePendingForSong={isSongReleaseSupportPending}
-          />
-        ) : !discoveryQuery.isLoading ? (
-          <Text style={styles.sectionTitle}>No Songs Here</Text>
-        ) : null}
-      </ScrollView>
-
-      <View style={styles.bottomControlsDock}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={0} style={[styles.bottomControlsDock, { marginBottom: keyboardInset }]}>
+        {keyboardInset > 0 ? <View pointerEvents="none" style={[styles.keyboardGapFill, { height: keyboardInset }]} /> : null}
         <DiscoveryControlsBar
           filterMode={filterMode}
           availableSortModes={LIBRARY_SORT_MODES}
@@ -222,7 +235,7 @@ export function PlaylistDetailScreen({ playlistId }: PlaylistDetailScreenProps) 
           sortMode={sortMode}
         />
         <BottomMenu activeKey="playlists" items={BOTTOM_MENU_ITEMS} onSelect={handleBottomMenuSelect} />
-      </View>
+      </KeyboardAvoidingView>
       <AppSidebar onClose={() => setSidebarVisible(false)} visible={sidebarVisible} />
     </View>
   );
@@ -256,6 +269,13 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
       backgroundColor: colors.appBackground,
       position: 'relative',
       zIndex: SEARCH_FILTER_SORT_Z_INDEX,
+    },
+    keyboardGapFill: {
+      backgroundColor: colors.appBackground,
+      left: 0,
+      position: 'absolute',
+      right: 0,
+      top: '100%',
     },
     sectionTitle: {
       color: colors.textPrimary,

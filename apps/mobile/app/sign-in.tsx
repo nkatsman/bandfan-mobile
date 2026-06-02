@@ -2,14 +2,13 @@ import { router, useRootNavigationState } from 'expo-router';
 import type { User } from 'firebase/auth';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as ExpoLinking from 'expo-linking';
-import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type ViewStyle } from 'react-native';
+import { Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import GoogleLogo from '../assets/Icons/logo-google.svg';
-import LogoDark from '../assets/BandFan/BandFan - Logo Dark.svg';
-import LogoLight from '../assets/BandFan/BandFan - Logo Light.svg';
-import ContrastIcon from '../assets/Icons/contrast-2-fill.svg';
-import SunIcon from '../assets/Icons/sun-line.svg';
+import { AppBackgroundPatternTile } from '../src/components/app-background-pattern';
+import { BrandLogoMark } from '../src/components/brand-logo-mark';
+import { useKeyboardInset } from '../src/components/use-keyboard-inset';
 import { DsCard } from '../src/components/ui/ds-card';
 import { DsInput } from '../src/components/ui/ds-input';
 import { DsTabs } from '../src/components/ui/ds-tabs';
@@ -17,7 +16,7 @@ import { BlockShadowPressable } from '../src/components/ui/block-shadow';
 import { DS, scaleH, scaleW } from '../src/design/ds';
 import { useAppTheme } from '../src/design/theme';
 import { cancelPendingGoogleAccount, fetchActiveLegalDocuments, fetchRegistrationStatus, initializeGoogleAccount, sendPasswordReset, signInWithEmail, signUpWithInvite, startGoogleSignIn, type ActiveLegalDocuments, type RegistrationStatus } from '../src/features/auth/auth-service';
-import { discoverySongsQueryDefaults, discoverySongsQueryKey, fetchDiscoverySongsForPreferences } from '../src/features/discovery/discovery-api';
+import { discoverySongsQueryDefaults, discoverySongsQueryKey, fetchDiscoverySongsPreviewForPreferences } from '../src/features/discovery/discovery-api';
 import { DEFAULT_PLAYER_SETTINGS, fetchPlayerSettings, playerSettingsQueryDefaults, playerSettingsQueryKey, type PlayerSettings } from '../src/features/preferences/player-settings-api';
 import { env, hasApiBaseUrl, hasFirebaseClientConfig } from '../src/lib/env';
 import { getCachedImageSrc } from '../src/lib/image-cache';
@@ -26,7 +25,8 @@ import { useSessionStore } from '../src/state/session-store';
 import { useThemeStore } from '../src/state/theme-store';
 
 const MIN_LAUNCH_MS = 1000;
-const PREFETCH_COVER_LIMIT = 8;
+const PREFETCH_COVER_LIMIT = 5;
+const PREFETCH_DISCOVER_LIMIT = 10;
 
 type AuthMode = 'sign-in' | 'sign-up';
 
@@ -49,16 +49,15 @@ export default function SignInScreen() {
   const status = useSessionStore((state) => state.status);
   const error = useSessionStore((state) => state.error);
   const styles = useMemo(() => createStyles(screenWidth, screenHeight, visualIsDark), [screenWidth, screenHeight, visualIsDark]);
-  const backgroundPatternItems = useMemo(() => buildSignInPatternItems(screenWidth, screenHeight, visualIsDark), [screenHeight, screenWidth, visualIsDark]);
+  const keyboardInset = useKeyboardInset();
+  const scrollViewRef = useRef<ScrollView | null>(null);
+  const passwordInputRef = useRef<TextInput | null>(null);
+  const inviteInputRef = useRef<TextInput | null>(null);
   const logoPressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toggleMode = useThemeStore((state) => state.toggleMode);
-  const BrandLogo = isDark || launchUsesDarkFallback ? LogoDark : LogoLight;
-  const ThemeIcon = visualIsDark ? SunIcon : ContrastIcon;
-
-  // Logo SVG dimensions scaled from 440-px reference canvas
-  const logoW = Math.round(scaleW(272.47, screenWidth));
-  const logoH = Math.round(scaleW(51.68,  screenWidth));
-  const formCardHeight = Math.round(Math.max(500, Math.min(scaleH(560, screenHeight), 620)));
+  const logoCardWidth = Math.round(scaleW(334.73, screenWidth));
+  const logoCardHeight = Math.round(scaleW(113.7, screenWidth));
+  const formCardHeight = Math.round(Math.max(430, Math.min(scaleH(486, screenHeight), 548)));
 
   const [authMode, setAuthMode] = useState<AuthMode>('sign-in');
   const [email, setEmail] = useState('');
@@ -186,6 +185,24 @@ export default function SignInScreen() {
       clearTimeout(logoPressTimeoutRef.current);
     }
   }, []);
+
+  useEffect(() => {
+    if (shouldShowLaunchShell || keyboardInset <= 0) {
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 80);
+
+    return () => clearTimeout(timeout);
+  }, [keyboardInset, shouldShowLaunchShell]);
+
+  const scrollFormToSubmit = () => {
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 80);
+  };
 
   const onLogoPressIn = () => {
     if (logoPressTimeoutRef.current) {
@@ -387,32 +404,31 @@ export default function SignInScreen() {
 
   const renderLogoCard = (shellStyle?: ViewStyle, pressedStyle: ViewStyle = styles.logoCardPressed) => (
     <DsCard
-      fixedHeight={Math.round(scaleW(113.7, screenWidth))}
+      fixedHeight={logoCardHeight}
       reserveShadowSize="thick"
       shadowSize={logoPressed ? 'thin' : 'thick'}
       style={[styles.logoCardShell, shellStyle, logoPressed && pressedStyle]}
-      width={Math.round(scaleW(334.73, screenWidth))}
+      width={logoCardWidth}
     >
-      <Pressable
-        accessibilityRole="button"
+      <BrandLogoMark
+        height={logoCardHeight}
+        interactive
+        logoNudgeX={-3}
+        logoNudgeY={2}
         onPress={onLogoPress}
         onPressIn={onLogoPressIn}
         onPressOut={onLogoPressOut}
-        style={styles.logoTapArea}
-      >
-        <BrandLogo height={logoH} style={styles.logoGraphic} width={logoW} />
-        <View style={styles.themeIconSlot}>
-          <ThemeIcon color={visualIsDark ? '#FFFFFF' : DS.color.ink} height={15} width={15} />
-        </View>
-      </Pressable>
+        width={logoCardWidth}
+      />
     </DsCard>
   );
 
   return (
     <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
       <View pointerEvents="none" style={styles.backgroundPattern}>
-        {backgroundPatternItems.map((itemStyle, index) => <View key={index} style={itemStyle} />)}
+        <AppBackgroundPatternTile isDark={visualIsDark} />
       </View>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={0} style={styles.keyboardAvoider}>
       {shouldShowLaunchShell ? (
         <View style={styles.launchShell}>
           {renderLogoCard(styles.launchLogoCard, styles.launchLogoCardPressed)}
@@ -459,7 +475,7 @@ export default function SignInScreen() {
           )}
         </View>
       ) : (
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} style={styles.scrollArea}>
+      <ScrollView ref={scrollViewRef} contentContainerStyle={[styles.scrollContent, { paddingBottom: 40 + keyboardInset }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} style={styles.scrollArea}>
         {/* ── Logo card ─────────────────────────────────────────────────
             Reference proportions (440-px canvas):
               Card face  : 334.73 × 113.7 px, thick border (7 px)
@@ -515,18 +531,32 @@ export default function SignInScreen() {
               <DsInput
                 keyboardType="email-address"
                 label={authMode === 'sign-up' ? 'EMAIL' : 'EMAIL / LOGIN'}
+                onFocus={scrollFormToSubmit}
+                onSubmitEditing={() => passwordInputRef.current?.focus()}
                 onChangeText={setEmail}
                 placeholder={authMode === 'sign-up' ? 'Email' : 'Username or email'}
                 placeholderTextColor={placeholderColor}
+                returnKeyType="next"
                 stackGap={14}
                 value={email}
               />
 
               <DsInput
                 label="PASSWORD"
+                onFocus={scrollFormToSubmit}
+                onSubmitEditing={() => {
+                  if (authMode === 'sign-up' && registrationStatus.registrationMode === 'invite_only') {
+                    inviteInputRef.current?.focus();
+                    return;
+                  }
+
+                  void onSubmit();
+                }}
                 onChangeText={setPassword}
                 placeholder="••••••••"
                 placeholderTextColor={placeholderColor}
+                ref={passwordInputRef}
+                returnKeyType={authMode === 'sign-up' && registrationStatus.registrationMode === 'invite_only' ? 'next' : 'done'}
                 secureTextEntry
                 stackGap={14}
                 value={password}
@@ -539,8 +569,12 @@ export default function SignInScreen() {
                     autoCorrect={false}
                     label="INVITE CODE"
                     onChangeText={(value) => setInviteCode(value.toUpperCase())}
+                    onFocus={scrollFormToSubmit}
+                    onSubmitEditing={() => void onSubmit()}
                     placeholder="####-####"
                     placeholderTextColor={placeholderColor}
+                    ref={inviteInputRef}
+                    returnKeyType="done"
                     stackGap={0}
                     value={inviteCode}
                   />
@@ -610,6 +644,7 @@ export default function SignInScreen() {
         </DsCard>
       </ScrollView>
       )}
+      </KeyboardAvoidingView>
 
       <Modal animationType="fade" onRequestClose={() => setShowGoogleInviteOnlyDialog(false)} transparent visible={showGoogleInviteOnlyDialog}>
         <View style={styles.modalRoot}>
@@ -720,13 +755,11 @@ async function prefetchDiscoverLaunchData() {
   }).catch(() => DEFAULT_PLAYER_SETTINGS);
   const discoveryQueryKey = [...discoverySongsQueryKey, { includeAiAssisted: playerSettings.showAiAssistedDiscoverSongs }] as const;
 
-  await queryClient.fetchQuery({
-    queryFn: () => fetchDiscoverySongsForPreferences({ includeAiAssisted: playerSettings.showAiAssistedDiscoverSongs }),
+  const songs = await queryClient.fetchQuery({
+    queryFn: () => fetchDiscoverySongsPreviewForPreferences({ includeAiAssisted: playerSettings.showAiAssistedDiscoverSongs, limit: PREFETCH_DISCOVER_LIMIT }),
     queryKey: discoveryQueryKey,
     ...discoverySongsQueryDefaults,
   });
-
-  const songs = queryClient.getQueryData<Awaited<ReturnType<typeof fetchDiscoverySongsForPreferences>>>(discoveryQueryKey) ?? [];
 
   void Promise.all(
     songs
@@ -757,6 +790,11 @@ function createStyles(screenWidth: number, screenHeight: number, isDark: boolean
       opacity: 1,
       zIndex: 0,
     },
+    keyboardAvoider: {
+      flex: 1,
+      position: 'relative',
+      zIndex: 1,
+    },
     scrollArea: {
       position: 'relative',
       zIndex: 1,
@@ -764,14 +802,14 @@ function createStyles(screenWidth: number, screenHeight: number, isDark: boolean
     scrollContent: {
       alignItems: 'center',
       flexGrow: 1,
-      paddingBottom: 40,
-      paddingTop: 12,
+      paddingTop: Math.round(Math.max(56, Math.min(scaleH(96, screenHeight), 116))),
     },
     launchShell: {
       alignItems: 'center',
       flex: 1,
-      justifyContent: 'center',
+      justifyContent: 'flex-start',
       paddingHorizontal: 24,
+      paddingTop: Math.round(Math.max(168, Math.min(scaleH(240, screenHeight), 280))),
       position: 'relative',
       zIndex: 1,
     },
@@ -855,42 +893,20 @@ function createStyles(screenWidth: number, screenHeight: number, isDark: boolean
     },
 
     // Logo tap area — fills the card face, centres the SVG
-    logoTapArea: {
-      alignItems: 'center',
-      flex: 1,
-      justifyContent: 'center',
-      position: 'relative',
-    },
-    logoGraphic: {
-      // Visual-balance nudge applied here on top of the centred position
-      marginLeft: -3,
-      marginTop: 2,
-    },
-    themeIconSlot: {
-      alignItems: 'center',
-      backgroundColor: 'transparent',
-      height: 34,
-      justifyContent: 'center',
-      position: 'absolute',
-      right: 0,
-      top: 12,
-      width: 38,
-    },
-
     // Form content wrapper
     formContent: {
       flex: 1,
       justifyContent: 'space-between',
       paddingHorizontal: DS.layout.cardInsetH,   // 26 px
-      paddingTop: 22,
-      paddingBottom: DS.layout.enterBottomGap,   // 32 px — ENTER btn to card edge
+      paddingTop: 18,
+      paddingBottom: 24,
     },
     formTop: {
       flexShrink: 1,
     },
     formBottom: {
       gap: 8,
-      marginTop: 28,
+      marginTop: 14,
     },
     ctaRow: {
       alignItems: 'stretch',
@@ -1141,32 +1157,3 @@ function createStyles(screenWidth: number, screenHeight: number, isDark: boolean
   });
 }
 
-function buildSignInPatternItems(screenWidth: number, screenHeight: number, isDark: boolean): ViewStyle[] {
-  if (isDark) {
-    const gap = 20;
-    const columns = Math.ceil(screenWidth / gap) + 1;
-    const rows = Math.ceil(screenHeight / gap) + 1;
-
-    return Array.from({ length: columns * rows }, (_, index) => ({
-      backgroundColor: 'rgba(255, 249, 239, 0.12)',
-      borderRadius: 1,
-      height: 2,
-      left: (index % columns) * gap + 1,
-      position: 'absolute',
-      top: Math.floor(index / columns) * gap + 1,
-      width: 2,
-    }));
-  }
-
-  const stripeCycle = 4;
-  const rows = Math.ceil(screenHeight / stripeCycle) + 1;
-
-  return Array.from({ length: rows }, (_, index) => ({
-    backgroundColor: 'rgba(34, 34, 32, 0.02)',
-    height: 2,
-    left: 0,
-    position: 'absolute',
-    right: 0,
-    top: index * stripeCycle,
-  }));
-}

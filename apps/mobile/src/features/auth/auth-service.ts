@@ -54,9 +54,12 @@ const syncAuthProvidersSchema = z.object({
   }),
 });
 
-const loginIdentifierSchema = z.object({
-  email: z.string().email().optional(),
-});
+const loginIdentifierSchema = z
+  .object({
+    email: z.string().email().optional(),
+    user: z.object({ email: z.string().email().optional() }).optional(),
+  })
+  .passthrough();
 
 const googleSignInAccountSchema = z.object({
   profile: z.object({
@@ -177,16 +180,19 @@ async function resolveIdentifierToEmail(identifier: string) {
     return trimmedIdentifier;
   }
 
+  const normalizedIdentifier = trimmedIdentifier.toLowerCase();
+
   try {
-    const response = await apiClient.getPublic(`/api/auth/login-identifier?identifier=${encodeURIComponent(trimmedIdentifier)}`, {
+    const response = await apiClient.getPublic(`/api/auth/login-identifier?identifier=${encodeURIComponent(normalizedIdentifier)}`, {
       schema: loginIdentifierSchema,
     });
+    const resolvedEmail = response.email ?? response.user?.email;
 
-    if (!response.email) {
+    if (!resolvedEmail) {
       throw new Error('Missing email for identifier lookup.');
     }
 
-    return response.email;
+    return resolvedEmail;
   } catch {
     const invalidCredentialError = new Error('Invalid credential.');
     (invalidCredentialError as Error & { code?: string }).code = 'auth/invalid-credential';

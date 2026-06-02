@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { LayoutChangeEvent, PanResponder, StyleSheet, View } from 'react-native';
+import { LayoutChangeEvent, PanResponder, StyleSheet, View, type GestureResponderEvent } from 'react-native';
 
 import { radii } from '../../design/tokens';
 import { useAppTheme } from '../../design/theme';
@@ -23,6 +23,8 @@ export function SeekBar({ interactive = true, layoutMemoryKey, onSeek, onSeekCha
   const [dragValue, setDragValue] = useState<number | null>(null);
   const [trackWidth, setTrackWidth] = useState(() => (layoutMemoryKey ? rememberedTrackWidths.get(layoutMemoryKey) ?? 0 : 0));
   const trackLeftRef = useRef(0);
+  const trackWidthRef = useRef(trackWidth);
+  const shellRef = useRef<View | null>(null);
 
   const displayedValue = isDragging && dragValue !== null ? dragValue : clampedValue;
   const thumbSize = isDragging ? 24 : 20;
@@ -34,36 +36,42 @@ export function SeekBar({ interactive = true, layoutMemoryKey, onSeek, onSeekCha
 
   const thumbLeft = trackWidth > 0 ? (displayedValue / 100) * trackWidth : 0;
 
-  function readValueFromPageX(pageX: number) {
-    if (trackWidth <= 0) {
-      return 0;
-    }
-
-    const rawX = pageX - trackLeftRef.current;
-    const boundedX = Math.max(0, Math.min(trackWidth, rawX));
-
-    return (boundedX / trackWidth) * 100;
-  }
-
-  function emitSeekChangeFromPageX(pageX: number) {
-    const nextValue = readValueFromPageX(pageX);
-    setDragValue(nextValue);
-    onSeekChange?.(nextValue);
-  }
-
-  function emitSeekCommitFromPageX(pageX: number) {
-    const nextValue = readValueFromPageX(pageX);
-    setDragValue(nextValue);
-    onSeek?.(nextValue);
-  }
-
   function handleLayout(event: LayoutChangeEvent) {
     const nextTrackWidth = event.nativeEvent.layout.width;
 
+    trackWidthRef.current = nextTrackWidth;
     setTrackWidth(nextTrackWidth);
 
     if (layoutMemoryKey && nextTrackWidth > 0) {
       rememberedTrackWidths.set(layoutMemoryKey, nextTrackWidth);
+    }
+  }
+
+  function readValueFromPageX(pageX: number) {
+    const measuredTrackWidth = trackWidthRef.current;
+
+    if (measuredTrackWidth <= 0) {
+      return clampedValue;
+    }
+
+    const rawX = pageX - trackLeftRef.current;
+    const boundedX = Math.max(0, Math.min(measuredTrackWidth, rawX));
+
+    return (boundedX / measuredTrackWidth) * 100;
+  }
+
+  function updateDragFromPageX(pageX: number, commit = false) {
+    if (!Number.isFinite(pageX)) {
+      return;
+    }
+
+    const nextValue = readValueFromPageX(pageX);
+    setDragValue(nextValue);
+
+    if (commit) {
+      onSeek?.(nextValue);
+    } else {
+      onSeekChange?.(nextValue);
     }
   }
 
@@ -72,32 +80,49 @@ export function SeekBar({ interactive = true, layoutMemoryKey, onSeek, onSeekCha
       PanResponder.create({
         onStartShouldSetPanResponder: () => interactive,
         onMoveShouldSetPanResponder: () => interactive,
-        onPanResponderGrant: (event) => {
-          trackLeftRef.current = event.nativeEvent.pageX - event.nativeEvent.locationX;
+        onPanResponderGrant: (event: GestureResponderEvent) => {
           setIsDragging(true);
-          emitSeekChangeFromPageX(event.nativeEvent.pageX);
+          setDragValue(clampedValue);
+          const grantPageX = event.nativeEvent?.pageX;
+
+          shellRef.current?.measureInWindow((x, _y, width) => {
+            trackLeftRef.current = x;
+
+            if (width > 0) {
+              trackWidthRef.current = width;
+              setTrackWidth(width);
+              if (layoutMemoryKey) {
+                rememberedTrackWidths.set(layoutMemoryKey, width);
+              }
+            }
+
+            if (typeof grantPageX === 'number') {
+              updateDragFromPageX(grantPageX);
+            }
+          });
         },
         onPanResponderMove: (_event, gestureState) => {
-          emitSeekChangeFromPageX(gestureState.moveX);
+          updateDragFromPageX(gestureState.moveX);
         },
         onPanResponderRelease: (_event, gestureState) => {
           const releaseX = gestureState.moveX || gestureState.x0;
-          emitSeekCommitFromPageX(releaseX);
+          updateDragFromPageX(releaseX, true);
           setDragValue(null);
           setIsDragging(false);
         },
         onPanResponderTerminate: (_event, gestureState) => {
           const releaseX = gestureState.moveX || gestureState.x0;
-          emitSeekCommitFromPageX(releaseX);
+          updateDragFromPageX(releaseX, true);
           setDragValue(null);
           setIsDragging(false);
         },
       }),
-    [interactive, onSeek, onSeekChange, trackWidth],
+    [clampedValue, interactive, layoutMemoryKey, onSeek, onSeekChange, trackWidth],
   );
 
   return (
     <View
+      ref={shellRef}
       onLayout={handleLayout}
       {...panResponder.panHandlers}
       style={styles.shell}

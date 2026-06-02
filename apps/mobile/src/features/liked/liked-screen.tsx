@@ -2,13 +2,14 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { useEffect } from 'react';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
 
 import { AppBackgroundPattern } from '../../components/app-background-pattern';
 import { AppSidebar } from '../../components/app-sidebar';
 import { DiscoveryControlsBar } from '../../components/discovery/discovery-controls-bar';
 import { MusicPreferenceControls } from '../../components/music-preference-controls';
 import { ScreenHeader } from '../../components/screen-header';
+import { useKeyboardInset } from '../../components/use-keyboard-inset';
 import { SongTable, type SongTableFilterMode, type SongTableSortMode } from '../../components/song-table';
 import { formatLoadingText, useLoadingDots } from '../../components/use-loading-dots';
 import { usePullToRefresh } from '../../components/use-pull-to-refresh';
@@ -38,6 +39,7 @@ export function LikedScreen() {
   const [filterMode, setFilterMode] = useState<SongTableFilterMode>('all');
   const [sortMode, setSortMode] = useState<SongTableSortMode>('votes-desc');
   const [sidebarVisible, setSidebarVisible] = useState(false);
+  const keyboardInset = useKeyboardInset();
   const styles = useMemo(() => createStyles(theme.ui), [theme]);
 
   const viewSongs = useMemo(() => {
@@ -66,8 +68,8 @@ export function LikedScreen() {
   });
   const { refreshIndicator, ...pullToRefreshProps } = usePullToRefresh({
     enabled: hasApiBaseUrl,
-    onRefresh: () => void discoveryQuery.refetch(),
-    refreshing: discoveryQuery.isRefetching,
+    onRefresh: () => discoveryQuery.refetch(),
+    refreshing: false,
   });
 
   useEffect(() => {
@@ -82,69 +84,60 @@ export function LikedScreen() {
   return (
     <View style={styles.root}>
       <AppBackgroundPattern />
-      <ScrollView
-        {...pullToRefreshProps}
+      <SongTable
         contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-        style={styles.scrollArea}
-      >
-        {refreshIndicator}
-        <ScreenHeader counter={isFavoritesLoading ? formatLoadingText('Loading', loadingDotCount) : `${viewSongs.length} favorite songs`} onLogoPress={() => setSidebarVisible(true)} title="Favorites" verticalOffset={HEADER_CENTER_OFFSET} />
-
-        <View style={styles.musicControlsShelf}>
-          <MusicPreferenceControls layout="fill" showNormalization={false} />
-        </View>
-
-        {likeErrorMessage ? (
+        hideLikeColumn
+        isLoading={isFavoritesLoading}
+        listHeaderComponent={(
           <>
-            <Text style={styles.sectionTitle}>Save Error</Text>
-            <Text style={styles.copy}>{likeErrorMessage}</Text>
-          </>
-        ) : null}
+            {refreshIndicator}
+            <ScreenHeader counter={isFavoritesLoading ? formatLoadingText('Loading', loadingDotCount) : `${viewSongs.length} favorite songs`} onLogoPress={() => setSidebarVisible(true)} title="Favorites" verticalOffset={HEADER_CENTER_OFFSET} />
 
-        {releaseSupportErrorMessage ? (
-          <>
-            <Text style={styles.sectionTitle}>Release Support Error</Text>
-            <Text style={styles.copy}>{releaseSupportErrorMessage}</Text>
-          </>
-        ) : null}
+            <View style={styles.musicControlsShelf}>
+              <MusicPreferenceControls layout="fill" showNormalization={false} />
+            </View>
 
-        {isFavoritesLoading ? (
-          <SongTable
-            hideLikeColumn
-            isLoading
-            loadingDotCount={loadingDotCount}
-            likePendingForSong={isSongLikePending}
-            menuContext="favorites"
-            onPlaySong={(song) => {
-              playSelection(viewSongs, song.id, song.sourceLabel);
-            }}
-            onToggleLikeSong={toggleSongLike}
-            onToggleVoteSong={toggleSongReleaseSupport}
-            songs={[]}
-            votePendingForSong={isSongReleaseSupportPending}
-          />
-        ) : likedSongs.length === 0 ? (
-          <Text style={styles.emptyTitle}>No favorites.</Text>
-        ) : viewSongs.length === 0 ? (
-          <Text style={styles.emptyTitle}>No favorites match.</Text>
-        ) : (
-          <SongTable
-            hideLikeColumn
-            likePendingForSong={isSongLikePending}
-            menuContext="favorites"
-            onPlaySong={(song) => {
-              playSelection(viewSongs, song.id, song.sourceLabel);
-            }}
-            onToggleLikeSong={toggleSongLike}
-            onToggleVoteSong={toggleSongReleaseSupport}
-            songs={viewSongs}
-            votePendingForSong={isSongReleaseSupportPending}
-          />
+            {likeErrorMessage ? (
+              <>
+                <Text style={styles.sectionTitle}>Save Error</Text>
+                <Text style={styles.copy}>{likeErrorMessage}</Text>
+              </>
+            ) : null}
+
+            {releaseSupportErrorMessage ? (
+              <>
+                <Text style={styles.sectionTitle}>Release Support Error</Text>
+                <Text style={styles.copy}>{releaseSupportErrorMessage}</Text>
+              </>
+            ) : null}
+
+            {!isFavoritesLoading && likedSongs.length === 0 ? (
+              <Text style={styles.emptyTitle}>No favorites.</Text>
+            ) : !isFavoritesLoading && viewSongs.length === 0 ? (
+              <Text style={styles.emptyTitle}>No favorites match.</Text>
+            ) : null}
+          </>
         )}
-      </ScrollView>
+        listProps={{
+          ...pullToRefreshProps,
+          showsVerticalScrollIndicator: false,
+          style: styles.scrollArea,
+        }}
+        loadingDotCount={loadingDotCount}
+        likePendingForSong={isSongLikePending}
+        menuContext="favorites"
+        onPlaySong={(song) => {
+          playSelection(viewSongs, song.id, song.sourceLabel);
+        }}
+        onToggleLikeSong={toggleSongLike}
+        onToggleVoteSong={toggleSongReleaseSupport}
+        showTableHeader={isFavoritesLoading || viewSongs.length > 0}
+        songs={isFavoritesLoading ? [] : viewSongs}
+        votePendingForSong={isSongReleaseSupportPending}
+      />
 
-      <View style={styles.bottomControlsDock}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={0} style={[styles.bottomControlsDock, { marginBottom: keyboardInset }]}>
+        {keyboardInset > 0 ? <View pointerEvents="none" style={[styles.keyboardGapFill, { height: keyboardInset }]} /> : null}
         <DiscoveryControlsBar
           filterMode={filterMode}
           availableSortModes={LIBRARY_SORT_MODES}
@@ -154,7 +147,7 @@ export function LikedScreen() {
           searchQuery={searchQuery}
           sortMode={sortMode}
         />
-      </View>
+      </KeyboardAvoidingView>
       <AppSidebar onClose={() => setSidebarVisible(false)} visible={sidebarVisible} />
     </View>
   );
@@ -175,6 +168,13 @@ function createStyles(colors: ReturnType<typeof useAppTheme>['ui']) {
       backgroundColor: colors.appBackground,
       position: 'relative',
       zIndex: SEARCH_FILTER_SORT_Z_INDEX,
+    },
+    keyboardGapFill: {
+      backgroundColor: colors.appBackground,
+      left: 0,
+      position: 'absolute',
+      right: 0,
+      top: '100%',
     },
     content: {
       paddingBottom: spacing.sm,

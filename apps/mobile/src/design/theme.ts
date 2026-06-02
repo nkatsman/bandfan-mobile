@@ -542,6 +542,7 @@ const appThemes: Record<ThemeMode, AppTheme> = {
     ui: {
       ...createComponentAliases(darkSemantic),
       appBackground: paletteThemes.dark.bone,
+      borderStrong: paletteThemes.dark.black,
       buttonMuted: paletteThemes.dark.charcoal,
       buttonPrimary: paletteThemes.dark.charcoal,
       buttonSecondary: paletteThemes.dark.charcoal,
@@ -559,7 +560,10 @@ const appThemes: Record<ThemeMode, AppTheme> = {
     palette: paletteThemes.light,
     semantic: lightSemantic,
     statusBarStyle: 'dark',
-    ui: createComponentAliases(lightSemantic),
+    ui: {
+      ...createComponentAliases(lightSemantic),
+      surfacePlayer: paletteThemes.light.green,
+    },
     uiSpacing: createSpacingAliases(lightSemantic),
   },
 };
