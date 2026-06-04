@@ -115,15 +115,19 @@ async function parseResponseBody(response: Response) {
   return text.length > 0 ? text : null;
 }
 
-function parseErrorBody(body: unknown, response: Response): ParsedErrorBody {
+function parseErrorBody(body: unknown, response: Response, requestLabel: string): ParsedErrorBody {
+  const fallback = `Request failed with status ${response.status}.`;
+  const message = readMessage(body) ?? fallback;
+
   return {
     code: readCode(body),
     details: readDetails(body),
-    message: readMessage(body) ?? `Request failed with status ${response.status}.`,
+    message: `${requestLabel}: ${message}`,
   };
 }
 
 async function request<TResponse>({ auth: authMode = 'none', body, headers, method, path, schema }: RequestOptions<TResponse>) {
+  const requestLabel = `${method} ${path}`;
   const requestHeaders: Record<string, string> = {
     Accept: 'application/json',
     ...headers,
@@ -155,7 +159,16 @@ async function request<TResponse>({ auth: authMode = 'none', body, headers, meth
   const parsedBody = await parseResponseBody(response);
 
   if (!response.ok) {
-    const parsedError = parseErrorBody(parsedBody, response);
+    const parsedError = parseErrorBody(parsedBody, response, requestLabel);
+
+    if (response.status >= 500) {
+      console.error('API 5xx response', {
+        body: parsedBody,
+        path,
+        method,
+        status: response.status,
+      });
+    }
 
     throw new ApiClientError(parsedError.message, {
       code: 'http',

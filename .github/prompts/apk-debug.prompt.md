@@ -24,6 +24,9 @@ Default behavior:
 - start Metro from `apps/mobile` with `npx expo start --dev-client --port 8081`
 - if Metro is stopped, crashed, missing from the terminal list, or port `8081` is not listening, restart Metro yourself before reporting status
 - run `adb reverse tcp:8081 tcp:8081`
+- before reusing an installed app, verify the installed APK on-device is debug signed
+- treat `CN=Android Debug` as the expected debug signer for dev runs in this workspace
+- if the installed app is not debug signed, uninstall `space.bandfan.mobile`, install the debug APK, then continue with reverse + relaunch
 - install a debug APK only when the app is missing, stale, or explicitly requested
 - otherwise reconnect Metro and relaunch the installed app
 
@@ -50,6 +53,12 @@ ADB hang recovery policy:
 APK lookup order:
 1. `D:/bfm/android/app/build/outputs/apk/debug/app-debug.apk`
 2. `apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk`
+
+Installed signer check:
+- when the app is already installed, resolve the installed base APK path with `adb shell pm path space.bandfan.mobile`
+- pull that APK locally and inspect it with `apksigner verify --verbose --print-certs`
+- if the signer is not `CN=Android Debug`, do not reuse that install for Metro/debugging
+- after reinstalling the debug APK, continue with the normal Metro/reverse/relaunch flow
 
 If no APK exists and install is needed:
 - build from `D:/bfm/android` when available

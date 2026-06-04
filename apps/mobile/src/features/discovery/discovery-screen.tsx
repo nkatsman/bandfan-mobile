@@ -127,7 +127,7 @@ export function DiscoveryScreen() {
         listHeaderComponent={(
           <>
             {refreshIndicator}
-            <ScreenHeader counter={isDiscoverLoading ? formatLoadingText('Loading', loadingDotCount) : `${viewSongs.length} songs ready to play`} onLogoPress={() => setSidebarVisible(true)} title="Discover" verticalOffset={HEADER_CENTER_OFFSET} />
+            <ScreenHeader counter={isDiscoverLoading ? formatLoadingText('Loading', loadingDotCount) : `${viewSongs.length} songs ready to play`} onLogoPress={() => setSidebarVisible(true)} onRefresh={() => { void discoveryQuery.refetch(); }} refreshLabel={discoveryQuery.isFetching && !isDiscoverLoading ? formatLoadingText('Refreshing', loadingDotCount) : 'Refresh songs'} title="Discover" verticalOffset={HEADER_CENTER_OFFSET} />
 
             <View style={styles.musicControlsShelf}>
               <MusicPreferenceControls layout="fill" showNormalization={false} />

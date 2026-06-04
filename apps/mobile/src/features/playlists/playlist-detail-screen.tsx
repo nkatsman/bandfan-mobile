@@ -153,7 +153,7 @@ export function PlaylistDetailScreen({ playlistId }: PlaylistDetailScreenProps) 
           listHeaderComponent={(
             <>
               {refreshIndicator}
-              <ScreenHeader counter={playlistsQuery.isLoading ? formatLoadingText('Loading', loadingDotCount) : 'Playlist not found.'} onLogoPress={() => setSidebarVisible(true)} title="Playlist" verticalOffset={HEADER_CENTER_OFFSET} />
+              <ScreenHeader counter={playlistsQuery.isLoading ? formatLoadingText('Loading', loadingDotCount) : 'Playlist not found.'} onLogoPress={() => setSidebarVisible(true)} onRefresh={() => { void playlistsQuery.refetch(); }} refreshLabel={playlistsQuery.isFetching ? formatLoadingText('Refreshing', loadingDotCount) : 'Refresh playlists'} title="Playlist" verticalOffset={HEADER_CENTER_OFFSET} />
 
               <View style={styles.musicControlsShelf}>
                 <MusicPreferenceControls layout="fill" showNormalization={false} />
@@ -184,7 +184,7 @@ export function PlaylistDetailScreen({ playlistId }: PlaylistDetailScreenProps) 
         listHeaderComponent={(
           <>
             {refreshIndicator}
-            <ScreenHeader counter={isSongsLoading ? formatLoadingText('Loading', loadingDotCount) : `${playlistSongs.length} songs in this playlist`} description={playlist.description} onLogoPress={() => setSidebarVisible(true)} title={playlist.title} verticalOffset={HEADER_CENTER_OFFSET} />
+            <ScreenHeader counter={isSongsLoading ? formatLoadingText('Loading', loadingDotCount) : `${playlistSongs.length} songs in this playlist`} description={playlist.description} onLogoPress={() => setSidebarVisible(true)} onRefresh={() => { void playlistsQuery.refetch(); if (hasApiBaseUrl) { void discoveryQuery.refetch(); } }} refreshLabel={(playlistsQuery.isFetching || discoveryQuery.isFetching) && !isSongsLoading ? formatLoadingText('Refreshing', loadingDotCount) : 'Refresh songs'} title={playlist.title} verticalOffset={HEADER_CENTER_OFFSET} />
 
             <View style={styles.musicControlsShelf}>
               <MusicPreferenceControls layout="fill" showNormalization={false} />

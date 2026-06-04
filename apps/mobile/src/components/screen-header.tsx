@@ -1,5 +1,5 @@
 import { PropsWithChildren, useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import BFDarkLogo from '../../assets/BandFan/BF Dark - No Card.svg';
@@ -15,6 +15,8 @@ type ScreenHeaderProps = PropsWithChildren<{
   description?: string;
   logoAccessibilityLabel?: string;
   onLogoPress?: () => void;
+  onRefresh?: () => void;
+  refreshLabel?: string;
   title: string;
   verticalOffset?: number;
 }>;
@@ -23,7 +25,7 @@ export const LOGO_BUTTON_SIZE = 135;
 export const LOGO_BUTTON_SHADOW_SIZE = 4;
 const LOGO_SIZE = 94;
 
-export function ScreenHeader({ actionsPlacement = 'wrap', children, counter, description, logoAccessibilityLabel = 'Open menu', onLogoPress, title, verticalOffset = 0 }: ScreenHeaderProps) {
+export function ScreenHeader({ actionsPlacement = 'wrap', children, counter, description, logoAccessibilityLabel = 'Open menu', onLogoPress, onRefresh, refreshLabel = 'Refresh songs', title, verticalOffset = 0 }: ScreenHeaderProps) {
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme, insets.top, verticalOffset), [insets.top, theme, verticalOffset]);
@@ -51,6 +53,11 @@ export function ScreenHeader({ actionsPlacement = 'wrap', children, counter, des
             <Text numberOfLines={1} style={styles.pageTitle}>{title}</Text>
             {description ? <Text numberOfLines={2} style={styles.pageDescription}>{description}</Text> : null}
             {counter ? <Text numberOfLines={1} style={styles.pageSubtitle}>{counter}</Text> : null}
+            {onRefresh ? (
+              <Pressable accessibilityRole="button" onPress={onRefresh} style={({ pressed }) => [styles.refreshButton, pressed && styles.pressed]}>
+                <Text numberOfLines={1} style={styles.refreshLabel}>{refreshLabel}</Text>
+              </Pressable>
+            ) : null}
           </View>
 
           {children ? <View style={[styles.controlsWrap, actionsPlacement === 'bottom' && styles.controlsWrapBottom]}>{children}</View> : null}
@@ -129,6 +136,19 @@ function createStyles(theme: ReturnType<typeof useAppTheme>, safeTopInset: numbe
     },
     pressed: {
       transform: [{ translateX: 1 }, { translateY: 1 }],
+    },
+    refreshButton: {
+      alignSelf: 'flex-start',
+      marginTop: 1,
+      paddingRight: spacing.sm,
+      paddingVertical: 1,
+    },
+    refreshLabel: {
+      color: colors.textSecondary,
+      fontFamily: DS.font.family,
+      fontSize: typeScale.small,
+      fontWeight: '400',
+      textDecorationLine: 'underline',
     },
     titleStack: {
       minWidth: 0,

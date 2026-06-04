@@ -1,6 +1,4 @@
 import { Stack } from 'expo-router';
-import { IBMPlexMono_400Regular, IBMPlexMono_500Medium, IBMPlexMono_700Bold } from '@expo-google-fonts/ibm-plex-mono';
-import { useFonts } from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
 import { useEffect } from 'react';
@@ -20,11 +18,7 @@ const NOTIFICATION_BAR_DARK_FILL = '#1A1A19';
 const NOTIFICATION_BAR_SHADOW_HEIGHT = 3;
 
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts({
-    IBMPlexMonoRegular: IBMPlexMono_400Regular,
-    IBMPlexMono: IBMPlexMono_500Medium,
-    IBMPlexMonoBold: IBMPlexMono_700Bold,
-  });
+  const fontsLoaded = true;
   useBootstrapAuth();
   const theme = useAppTheme();
   const debugModeEnabled = useDebugStore((state) => state.debugModeEnabled);

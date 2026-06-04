@@ -1,44 +1,20 @@
 import { create } from 'zustand';
-import { createAudioPlayer, setAudioModeAsync, setIsAudioActiveAsync, type AudioPlayer, type AudioStatus } from 'expo-audio';
-import type { EventSubscription } from 'expo-modules-core';
+import TrackPlayer, { Event, State, Capability, AppKilledPlaybackBehavior } from 'react-native-track-player';
 
 import { claimPlaybackLease, fetchPlaybackLease, isPlaybackLeaseOwnedByThisDevice, releasePlaybackLease } from '../features/player/playback-lease-api';
+import { saveSongPreference } from '../features/preferences/preferences-api';
+import { sendReleaseSupport } from '../features/release-support/release-support-api';
+import { hasApiBaseUrl } from '../lib/env';
 import { dbToNativeVolume, deriveEffectivePlaybackNormalizationGainDb } from '../lib/loudness';
 import { Song } from '../types/music';
 
 let pendingPlayId = 0;
-let player: AudioPlayer | null = null;
-let playerSubscription: EventSubscription | null = null;
 let playbackSongId: string | null = null;
 let finishedSongId: string | null = null;
 let seekingUntil: number | null = null;
-let audioModeInitialized = false;
-let playIntentUntil: number | null = null;
-let playbackStateOverride: { isPlaying: boolean; until: number } | null = null;
 let activePlaybackLeaseId: string | null = null;
-let lastPlaybackProgressUpdateAt = 0;
-let ignoreNativeStatusUntil = 0;
 
-const PLAYBACK_PROGRESS_UPDATE_MS = 500;
-const PLAYBACK_STATE_OVERRIDE_MS = 900;
-const SOURCE_CHANGE_STATUS_IGNORE_MS = 900;
-
-function setPlaybackStateOverride(isPlaying: boolean) {
-  playbackStateOverride = { isPlaying, until: Date.now() + PLAYBACK_STATE_OVERRIDE_MS };
-}
-
-function readPlaybackStateOverride() {
-  if (!playbackStateOverride) {
-    return null;
-  }
-
-  if (Date.now() >= playbackStateOverride.until) {
-    playbackStateOverride = null;
-    return null;
-  }
-
-  return playbackStateOverride.isPlaying;
-}
+const PREVIOUS_TRACK_RESTART_THRESHOLD_S = 3;
 
 async function claimCurrentPlaybackLease(songId: string) {
   try {
@@ -64,130 +40,106 @@ async function releaseCurrentPlaybackLease() {
   }
 }
 
-function hasFreshPlayIntent() {
-  return playIntentUntil !== null && Date.now() < playIntentUntil;
-}
-
-function clearCurrentPlayback() {
-  playIntentUntil = null;
-  playbackStateOverride = null;
-  player?.pause();
-  player?.clearLockScreenControls();
-  playbackSongId = null;
-  finishedSongId = null;
-}
-
-function syncNativePlayerVolume(song: Song | null, isNormalizationEnabled: boolean) {
-  if (!player) {
-    return;
-  }
-
-  player.volume = isNormalizationEnabled
+function syncVolume(song: Song | null, isNormalizationEnabled: boolean) {
+  const volume = isNormalizationEnabled
     ? dbToNativeVolume(deriveEffectivePlaybackNormalizationGainDb(song?.loudnessAnalysis))
     : 1;
+  void TrackPlayer.setVolume(volume);
 }
 
-function releaseCurrentPlayer() {
-  playerSubscription?.remove();
-  playerSubscription = null;
-
-  if (!player) {
-    return;
-  }
-
+async function updateNotificationLikedVotedState(song: Song | null) {
   try {
-    player.pause();
-    player.clearLockScreenControls();
-    player.remove();
-  } finally {
-    player = null;
+    await TrackPlayer.updateOptions({
+      likeOptions: { isActive: Boolean(song?.liked), title: 'Like' },
+      dislikeOptions: { isActive: Boolean(song?.voted), title: 'Vote' },
+    });
+  } catch {
+    // Non-fatal — notification state update failure does not affect playback.
   }
 }
 
-async function prepareNativeAudioBeforeNewSource() {
-  player?.pause();
-  player?.clearLockScreenControls();
-  await setIsAudioActiveAsync(true);
-}
-
-function handlePlaybackStatus(status: AudioStatus) {
-  const now = Date.now();
-
-  if (now < ignoreNativeStatusUntil) {
-    return;
+export async function setupTrackPlayer() {
+  try {
+    await TrackPlayer.setupPlayer({
+      minBuffer: 15,
+      maxBuffer: 60,
+      playBuffer: 2,
+      backBuffer: 10,
+    });
+  } catch {
+    // Already set up (e.g. Metro Fast Refresh) — safe to continue.
   }
 
-  const currentState = usePlayerStore.getState();
+  await TrackPlayer.updateOptions({
+    android: {
+      appKilledPlaybackBehavior: AppKilledPlaybackBehavior.StopPlaybackAndRemoveNotification,
+    },
+    // Notification button order: Like · Prev · Play/Pause · Next · Vote
+    capabilities: [
+      Capability.Like,
+      Capability.SkipToPrevious,
+      Capability.Play,
+      Capability.Pause,
+      Capability.SkipToNext,
+      Capability.Dislike,
+      Capability.SeekTo,
+      Capability.Stop,
+    ],
+    // Compact notification (3 buttons): Prev · Play/Pause · Next
+    compactCapabilities: [
+      Capability.SkipToPrevious,
+      Capability.Play,
+      Capability.SkipToNext,
+    ],
+    likeOptions: { isActive: false, title: 'Like' },
+    dislikeOptions: { isActive: false, title: 'Vote' },
+    progressUpdateEventInterval: 1,
+  });
 
-  if (!status.isLoaded) {
-    const localPlaybackOverride = readPlaybackStateOverride();
-    const shouldKeepShowingPlaying = currentState.isPlaying && Boolean(currentState.activeSong);
-    usePlayerStore.setState({ currentSeconds: 0, durationSeconds: 0, isLoading: Boolean(playbackSongId) || hasFreshPlayIntent(), isPlaying: localPlaybackOverride ?? (hasFreshPlayIntent() || shouldKeepShowingPlaying) });
-    return;
-  }
+  // Playback state → Zustand
+  TrackPlayer.addEventListener(Event.PlaybackState, ({ state }) => {
+    switch (state) {
+      case State.Playing:
+        usePlayerStore.setState({ isLoading: false, isPlaying: true });
+        break;
+      case State.Paused:
+      case State.Stopped: {
+        // During a new-track load isLoading=true — skip transient paused states from source swap.
+        const { isLoading } = usePlayerStore.getState();
+        if (!isLoading) {
+          usePlayerStore.setState({ isLoading: false, isPlaying: false });
+        }
+        break;
+      }
+      case State.Loading:
+      case State.Buffering:
+        usePlayerStore.setState({ isLoading: true });
+        break;
+      case State.Error:
+        usePlayerStore.setState({ isLoading: false, isPlaying: false });
+        break;
+      default:
+        break;
+    }
+  });
 
-  if (status.didJustFinish && playbackSongId !== null && finishedSongId !== playbackSongId) {
-    finishedSongId = playbackSongId;
-    advanceAfterTrackFinish();
-    return;
-  }
-
-  if (status.playing) {
-    playIntentUntil = null;
-  }
-
-  const localPlaybackOverride = readPlaybackStateOverride();
-  const shouldKeepShowingPlaying = currentState.isPlaying && Boolean(currentState.activeSong);
-  const shouldShowPlaying = localPlaybackOverride ?? (status.playing || hasFreshPlayIntent() || shouldKeepShowingPlaying);
-
-  // Suppress progress updates while a programmatic seek is in-flight.
-  if (seekingUntil !== null) {
-    if (Date.now() < seekingUntil) {
-      usePlayerStore.setState({ isLoading: status.isBuffering, isPlaying: shouldShowPlaying });
+  // Progress → Zustand
+  TrackPlayer.addEventListener(Event.PlaybackProgressUpdated, ({ position, duration }) => {
+    if (seekingUntil !== null && Date.now() < seekingUntil) {
       return;
     }
     seekingUntil = null;
-  }
-
-  const progressPercent =
-    status.duration > 0
-      ? Math.max(0, Math.min(100, (status.currentTime / status.duration) * 100))
-      : 0;
-
-  const shouldUpdateProgress = now - lastPlaybackProgressUpdateAt >= PLAYBACK_PROGRESS_UPDATE_MS || status.didJustFinish;
-  const shouldUpdatePlaybackState = currentState.isLoading !== status.isBuffering || currentState.isPlaying !== shouldShowPlaying;
-
-  if (shouldUpdateProgress || shouldUpdatePlaybackState) {
-    lastPlaybackProgressUpdateAt = shouldUpdateProgress ? now : lastPlaybackProgressUpdateAt;
-    usePlayerStore.setState({
-      currentSeconds: shouldUpdateProgress ? status.currentTime : currentState.currentSeconds,
-      durationSeconds: shouldUpdateProgress ? status.duration : currentState.durationSeconds,
-      isLoading: status.isBuffering,
-      isPlaying: shouldShowPlaying,
-      progressPercent: shouldUpdateProgress ? progressPercent : currentState.progressPercent,
-    });
-  }
-}
-
-async function ensureAudioMode() {
-  if (audioModeInitialized) return;
-
-  await setAudioModeAsync({
-    allowsRecording: false,
-    playsInSilentMode: true,
-    interruptionMode: 'doNotMix',
-    shouldPlayInBackground: true,
-    shouldRouteThroughEarpiece: false,
+    const progressPercent = duration > 0 ? Math.max(0, Math.min(100, (position / duration) * 100)) : 0;
+    usePlayerStore.setState({ currentSeconds: position, durationSeconds: duration, progressPercent });
   });
 
-  audioModeInitialized = true;
-}
-
-function getOrCreatePlayer(): AudioPlayer {
-  if (player) return player;
-  player = createAudioPlayer(null, { updateInterval: 250 });
-  playerSubscription = player.addListener('playbackStatusUpdate', handlePlaybackStatus);
-  return player;
+  // Track finished → advance queue
+  TrackPlayer.addEventListener(Event.PlaybackQueueEnded, () => {
+    if (playbackSongId !== null && finishedSongId !== playbackSongId) {
+      finishedSongId = playbackSongId;
+      advanceAfterTrackFinish();
+    }
+  });
 }
 
 function getNextQueueIndex(state: Pick<PlayerState, 'activeIndex' | 'isShuffleEnabled' | 'loopMode' | 'queue'>, automatic: boolean) {
@@ -195,7 +147,9 @@ function getNextQueueIndex(state: Pick<PlayerState, 'activeIndex' | 'isShuffleEn
     return -1;
   }
 
-  if (state.loopMode === 'track') {
+  // Repeat-one only applies to automatic advance (track finishing).
+  // Manual next always skips to the next song.
+  if (state.loopMode === 'track' && automatic) {
     return state.activeIndex;
   }
 
@@ -207,29 +161,24 @@ function getNextQueueIndex(state: Pick<PlayerState, 'activeIndex' | 'isShuffleEn
 }
 
 function advanceAfterTrackFinish() {
-  usePlayerStore.setState((state) => {
-    const nextIndex = getNextQueueIndex(state, true);
+  const state = usePlayerStore.getState();
+  const nextIndex = getNextQueueIndex(state, true);
 
-    if (nextIndex < 0) {
-      return {
-        isLoading: false,
-        isPlaying: false,
-        progressPercent: 100,
-      };
-    }
+  if (nextIndex < 0) {
+    usePlayerStore.setState({ isLoading: false, isPlaying: false, progressPercent: 100 });
+    return;
+  }
 
-    const nextSong = state.queue[nextIndex] ?? null;
-    void playSong(nextSong);
-
-    return {
-      activeIndex: nextIndex,
-      activeSong: nextSong,
-      isLoading: Boolean(nextSong?.audioUrl),
-      isMiniPlayerHidden: false,
-      isPlaying: Boolean(nextSong?.audioUrl),
-      progressPercent: 0,
-    };
+  const nextSong = state.queue[nextIndex] ?? null;
+  usePlayerStore.setState({
+    activeIndex: nextIndex,
+    activeSong: nextSong,
+    isLoading: Boolean(nextSong?.audioUrl),
+    isMiniPlayerHidden: false,
+    isPlaying: Boolean(nextSong?.audioUrl),
+    progressPercent: 0,
   });
+  void playSong(nextSong);
 }
 
 function shuffleSongs(songs: Song[]) {
@@ -259,70 +208,47 @@ async function playSong(song: Song | null) {
   const thisId = ++pendingPlayId;
 
   if (!song?.audioUrl) {
-    clearCurrentPlayback();
+    playbackSongId = null;
+    finishedSongId = null;
+    activePlaybackLeaseId = null;
+    void TrackPlayer.reset();
     usePlayerStore.setState({ isLoading: false, isPlaying: false });
     return;
   }
 
-  // Same song — restart if near end, otherwise just play.
-  if (playbackSongId === song.id && player) {
-    try {
-      if (player.isLoaded && player.duration > 0 && player.duration - player.currentTime < 0.25) {
-        await player.seekTo(0);
-      }
-      if (pendingPlayId !== thisId) return;
-      setPlaybackStateOverride(true);
-      usePlayerStore.setState({ isLoading: false, isPlaying: true });
-      player.play();
-    } catch {
-      usePlayerStore.setState({ isLoading: false, isPlaying: false });
-    }
-    return;
-  }
+  playbackSongId = song.id;
+  finishedSongId = null;
+  activePlaybackLeaseId = null;
+  usePlayerStore.setState({ currentSeconds: 0, durationSeconds: 0, isLoading: true, isPlaying: true, progressPercent: 0 });
 
   try {
-    playIntentUntil = Date.now() + 1200;
-    await prepareNativeAudioBeforeNewSource();
-    if (pendingPlayId !== thisId) return;
-
-    await ensureAudioMode();
-    if (pendingPlayId !== thisId) return;
-
-    const p = getOrCreatePlayer();
-    ignoreNativeStatusUntil = Date.now() + SOURCE_CHANGE_STATUS_IGNORE_MS;
-    lastPlaybackProgressUpdateAt = 0;
-    setPlaybackStateOverride(true);
-    usePlayerStore.setState({ currentSeconds: 0, durationSeconds: 0, isLoading: false, isPlaying: true, progressPercent: 0 });
-    p.replace({ uri: song.audioUrl });
-    if (pendingPlayId !== thisId) return;
-
-    syncNativePlayerVolume(song, usePlayerStore.getState().isNormalizationEnabled);
-
-    p.play();
-    playbackSongId = song.id;
-    finishedSongId = null;
-    void claimCurrentPlaybackLease(song.id);
-
-    p.setActiveForLockScreen(true, {
+    await TrackPlayer.load({
+      id: song.id,
+      url: song.audioUrl,
       title: song.title,
-      artist: song.artist,
-      artworkUrl: song.coverArtUrl,
-    }, {
-      showSeekBackward: true,
-      showSeekForward: true,
+      artist: song.artist ?? undefined,
+      artwork: song.coverArtUrl ?? undefined,
     });
+
+    if (pendingPlayId !== thisId) return;
+
+    syncVolume(song, usePlayerStore.getState().isNormalizationEnabled);
+    await TrackPlayer.play();
+
+    if (pendingPlayId !== thisId) return;
+
+    void updateNotificationLikedVotedState(song);
+    void claimCurrentPlaybackLease(song.id);
   } catch {
     if (pendingPlayId === thisId) {
-      playIntentUntil = null;
+      playbackSongId = null;
       usePlayerStore.setState({ isLoading: false, isPlaying: false });
     }
   }
 }
 
 function pauseSong() {
-  playIntentUntil = null;
-  setPlaybackStateOverride(false);
-  player?.pause();
+  void TrackPlayer.pause();
 }
 
 type PlayerState = {
@@ -430,6 +356,21 @@ export const usePlayerStore = create<PlayerState>((set) => ({
         return state;
       }
 
+      // If past the restart threshold, seek to beginning instead of going to previous track.
+      if (state.currentSeconds > PREVIOUS_TRACK_RESTART_THRESHOLD_S && state.activeSong) {
+        seekingUntil = Date.now() + 500;
+        void TrackPlayer.seekTo(0).then(() => {
+          seekingUntil = null;
+          return TrackPlayer.play();
+        });
+        return {
+          currentSeconds: 0,
+          progressPercent: 0,
+          isLoading: false,
+          isPlaying: true,
+        };
+      }
+
       const previousIndex = state.activeIndex <= 0 ? state.queue.length - 1 : state.activeIndex - 1;
       const previousSong = state.queue[previousIndex] ?? null;
       void playSong(previousSong);
@@ -448,8 +389,9 @@ export const usePlayerStore = create<PlayerState>((set) => ({
   queue: [],
   seekToPercent: (percent) => {
     const clamped = Math.max(0, Math.min(100, percent));
+    const { durationSeconds } = usePlayerStore.getState();
 
-    if (!player || !player.isLoaded || player.duration <= 0) {
+    if (durationSeconds <= 0) {
       set({ progressPercent: clamped });
       return;
     }
@@ -457,19 +399,19 @@ export const usePlayerStore = create<PlayerState>((set) => ({
     seekingUntil = Date.now() + 500;
     set({ progressPercent: clamped });
 
-    const targetSeconds = (clamped / 100) * player.duration;
-    void player.seekTo(targetSeconds).finally(() => {
+    const targetSeconds = (clamped / 100) * durationSeconds;
+    void TrackPlayer.seekTo(targetSeconds).finally(() => {
       seekingUntil = null;
     });
   },
   setMiniPlayerHidden: (isHidden) => set({ isFullPlayerOpen: false, isMiniPlayerHidden: isHidden }),
   setNormalizationEnabled: (isEnabled) => set((state) => {
-    syncNativePlayerVolume(state.activeSong, isEnabled);
+    syncVolume(state.activeSong, isEnabled);
     return { isNormalizationEnabled: isEnabled };
   }),
   setPlaybackSettings: (settings) => set((state) => {
     if (typeof settings.isNormalizationEnabled === 'boolean') {
-      syncNativePlayerVolume(state.activeSong, settings.isNormalizationEnabled);
+      syncVolume(state.activeSong, settings.isNormalizationEnabled);
     }
 
     return {
@@ -481,21 +423,28 @@ export const usePlayerStore = create<PlayerState>((set) => ({
   stopPlayback: () => {
     ++pendingPlayId;
     void releaseCurrentPlaybackLease();
-    clearCurrentPlayback();
-    releaseCurrentPlayer();
+    playbackSongId = null;
+    finishedSongId = null;
+    void TrackPlayer.reset();
     set({ activeIndex: -1, activeSong: null, currentSeconds: 0, durationSeconds: 0, isFullPlayerOpen: false, isLoading: false, isMiniPlayerHidden: false, isPlaying: false, progressPercent: 0, queue: [] });
   },
   stopForRemotePlayback: () => {
     ++pendingPlayId;
     activePlaybackLeaseId = null;
-    clearCurrentPlayback();
-    releaseCurrentPlayer();
+    playbackSongId = null;
+    finishedSongId = null;
+    void TrackPlayer.reset();
     set({ activeIndex: -1, activeSong: null, currentSeconds: 0, durationSeconds: 0, isFullPlayerOpen: false, isLoading: false, isMiniPlayerHidden: false, isPlaying: false, progressPercent: 0, queue: [] });
   },
   checkRemotePlaybackLease: async () => {
     const state = usePlayerStore.getState();
 
     if (!state.activeSong || !state.isPlaying) {
+      return;
+    }
+
+    // WEAK-6: skip if a song transition is in progress.
+    if (playbackSongId !== state.activeSong.id) {
       return;
     }
 
@@ -531,34 +480,50 @@ export const usePlayerStore = create<PlayerState>((set) => ({
       };
     }),
   setSongLiked: (songId, liked) =>
-    set((state) => ({
-      activeSong: state.activeSong?.id === songId ? { ...state.activeSong, liked } : state.activeSong,
-      queue: state.queue.map((song) => (song.id === songId ? { ...song, liked } : song)),
-    })),
+    set((state) => {
+      const nextActiveSong = state.activeSong?.id === songId ? { ...state.activeSong, liked } : state.activeSong;
+      if (state.activeSong?.id === songId) {
+        void updateNotificationLikedVotedState(nextActiveSong);
+      }
+      return {
+        activeSong: nextActiveSong,
+        queue: state.queue.map((song) => (song.id === songId ? { ...song, liked } : song)),
+      };
+    }),
   setSongVoted: (songId, voted) =>
-    set((state) => ({
-      activeSong: state.activeSong?.id === songId ? { ...state.activeSong, voted } : state.activeSong,
-      queue: state.queue.map((song) => (song.id === songId ? { ...song, voted } : song)),
-    })),
+    set((state) => {
+      const nextActiveSong = state.activeSong?.id === songId ? { ...state.activeSong, voted } : state.activeSong;
+      if (state.activeSong?.id === songId) {
+        void updateNotificationLikedVotedState(nextActiveSong);
+      }
+      return {
+        activeSong: nextActiveSong,
+        queue: state.queue.map((song) => (song.id === songId ? { ...song, voted } : song)),
+      };
+    }),
   togglePlayback: () =>
     set((state) => {
       if (!state.activeSong?.audioUrl) {
         return { isPlaying: false, progressPercent: 0 };
       }
 
-      if (state.isPlaying) {
+      if (state.isPlaying && !state.isLoading) {
         pauseSong();
         return { isLoading: false, isMiniPlayerHidden: false, isPlaying: false };
       }
 
-      playIntentUntil = Date.now() + 1200;
-      setPlaybackStateOverride(true);
-      void playSong(state.activeSong);
+      if (state.isPlaying && state.isLoading) {
+        // Source is still buffering — tap is a no-op to prevent accidental pause/restart.
+        return state;
+      }
+
+      // Resume — track is already loaded in RNTP, just call play().
+      void TrackPlayer.play();
       return { isLoading: false, isMiniPlayerHidden: false, isPlaying: true };
     }),
   toggleNormalization: () => set((state) => {
     const nextEnabled = !state.isNormalizationEnabled;
-    syncNativePlayerVolume(state.activeSong, nextEnabled);
+    syncVolume(state.activeSong, nextEnabled);
     return { isNormalizationEnabled: nextEnabled };
   }),
   toggleRepeatMode: () => set((state) => ({ loopMode: state.loopMode === 'off' ? 'queue' : state.loopMode === 'queue' ? 'track' : 'off' })),
@@ -584,3 +549,31 @@ export const usePlayerStore = create<PlayerState>((set) => ({
     };
   }),
 }));
+
+export async function remoteToggleLike() {
+  const { activeSong } = usePlayerStore.getState();
+  if (!activeSong) return;
+  const nextLiked = !activeSong.liked;
+  usePlayerStore.getState().setSongLiked(activeSong.id, nextLiked);
+  if (!hasApiBaseUrl) return;
+  try {
+    const result = await saveSongPreference({ songId: activeSong.id, liked: nextLiked });
+    usePlayerStore.getState().setSongLiked(result.songId, result.liked);
+  } catch {
+    usePlayerStore.getState().setSongLiked(activeSong.id, !nextLiked);
+  }
+}
+
+export async function remoteToggleVote() {
+  const { activeSong } = usePlayerStore.getState();
+  if (!activeSong) return;
+  const nextVoted = !activeSong.voted;
+  usePlayerStore.getState().setSongVoted(activeSong.id, nextVoted);
+  if (!hasApiBaseUrl) return;
+  try {
+    const result = await sendReleaseSupport({ songId: activeSong.id, supported: nextVoted });
+    usePlayerStore.getState().setSongVoted(result.songId, result.supported);
+  } catch {
+    usePlayerStore.getState().setSongVoted(activeSong.id, !nextVoted);
+  }
+}

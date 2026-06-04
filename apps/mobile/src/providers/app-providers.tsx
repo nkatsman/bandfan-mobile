@@ -1,12 +1,16 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { PropsWithChildren, useEffect } from 'react';
 import { AppState, Text, TextInput } from 'react-native';
+import TrackPlayer from 'react-native-track-player';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { queryClient } from '../lib/query-client';
+import { PlaybackService } from '../lib/track-player-service';
 import { useDebugStore } from '../state/debug-store';
-import { usePlayerStore } from '../state/player-store';
+import { usePlayerStore, setupTrackPlayer } from '../state/player-store';
 import { useThemeStore } from '../state/theme-store';
+
+TrackPlayer.registerPlaybackService(() => PlaybackService);
 
 export function AppProviders({ children }: PropsWithChildren) {
   const hydrateDebugMode = useDebugStore((state) => state.hydrateDebugMode);
@@ -31,6 +35,10 @@ export function AppProviders({ children }: PropsWithChildren) {
       ...(baseInput.defaultProps ?? {}),
       style: [baseInput.defaultProps?.style, { fontFamily: 'IBMPlexMono' }],
     };
+  }, []);
+
+  useEffect(() => {
+    void setupTrackPlayer();
   }, []);
 
   useEffect(() => {

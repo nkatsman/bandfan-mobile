@@ -91,7 +91,7 @@ export function LikedScreen() {
         listHeaderComponent={(
           <>
             {refreshIndicator}
-            <ScreenHeader counter={isFavoritesLoading ? formatLoadingText('Loading', loadingDotCount) : `${viewSongs.length} favorite songs`} onLogoPress={() => setSidebarVisible(true)} title="Favorites" verticalOffset={HEADER_CENTER_OFFSET} />
+            <ScreenHeader counter={isFavoritesLoading ? formatLoadingText('Loading', loadingDotCount) : `${viewSongs.length} favorite songs`} onLogoPress={() => setSidebarVisible(true)} onRefresh={() => { void discoveryQuery.refetch(); }} refreshLabel={discoveryQuery.isFetching && !isFavoritesLoading ? formatLoadingText('Refreshing', loadingDotCount) : 'Refresh songs'} title="Favorites" verticalOffset={HEADER_CENTER_OFFSET} />
 
             <View style={styles.musicControlsShelf}>
               <MusicPreferenceControls layout="fill" showNormalization={false} />
